@@ -10,20 +10,80 @@ char * sy_ttoc(SymbolType type) {
       return "array of integers";
   }
 
-  failwith("Failed to determine symbol type");
+  return NULL;
 }
 
-void sy_print_value(const void * value, SymbolType type) {
+void sy_print_value(SymbolValue value, SymbolType type) {
   switch(type) {
     case ST_UNKNOWN_TYPE:
       printf("N/A");
       return;
     case ST_INTEGER_VALUE:
-      printf("%d", (int) (*value));
+      printf("%d", value.integer);
       return;
     case ST_INTEGER_ARRAY:
-      size_t l
+      printf("|");
+
+      size_t * current = (size_t *) calloc(value.Array.dimension, sizeof(size_t));
+
+      do {
+        printf(" %d |", (*sy_array_address(value, current)));
+      } while (sy_array_iterator_increment(current, value.Array.sizes, value.Array.dimension));
+
+      free(current);
+      printf("\n");
+      return;
   }
+
+  failwith("Failed to determine symbol type");
+}
+
+int * sy_array_address(SymbolValue value, size_t * coordinates) {
+  if(coordinates == NULL)
+    failwith("Failed to determine array value address! Provided coordinates cannot be NULL");
+
+  size_t shift = 0, temp = 1;
+  size_t i = 0, j = 0;
+
+#ifdef _DEBUG
+  printf("getting [%lu][%lu]\n", coordinates[0], coordinates[1]);
+#endif
+
+  for(i = 0; i < value.Array.dimension; i++) {
+    for(j = i + 1; j < value.Array.dimension; j++) {
+      temp *= value.Array.sizes[j];
+    }
+    shift += coordinates[i] * temp;
+    temp = 1;
+  }
+
+  return (value.Array.array + shift);
+}
+
+bool sy_array_iterator_increment(size_t * iterator, const size_t * sizes, size_t dimension) {
+  int i = 0, final = 0;
+  bool increment = false;
+
+  for(i = (dimension - 1); i >= 0; i--) {
+    if(iterator[i] < (sizes[i] - 1)) {
+      iterator[i]++;
+      increment = true;
+      final = i;
+      break;
+    }
+    increment = false;
+  }
+
+  if(increment) {
+    if(final < (dimension - 1)) {
+      for(i = (dimension - 1); i > final; i--)
+        iterator[i] = 0;
+    }
+
+    return true;
+  }
+
+  return false;
 }
 
 Symbol * sy_alloc(void) {
@@ -35,13 +95,12 @@ Symbol * sy_alloc(void) {
   table->identifier = NULL;
   table->constant = false;
   table->type = ST_UNKNOWN_TYPE;
-  table->value = NULL;
   table->next = NULL;
 
   return table;
 }
 
-Symbol * sy_add_variable(Symbol * table, const char * identifier, bool constant, SymbolType type, const void * value) {
+Symbol * sy_add_variable(Symbol * table, const char * identifier, bool constant, SymbolType type, SymbolValue value) {
   Symbol * symbol = sy_alloc();
 
   symbol->identifier = strdup(identifier);
@@ -51,21 +110,21 @@ Symbol * sy_add_variable(Symbol * table, const char * identifier, bool constant,
 
   symbol->constant = constant;
   symbol->type = type;
-  symbol->value = memcpy(symbol->value, value, (size_t) sizeof(*value));
+  symbol->value = value;
   symbol->next = table;
 
   return symbol;
 }
 
-Symbol * sy_add_temporary(Symbol * table, SymbolType type, const void * value) {
+Symbol * sy_add_temporary(Symbol * table, SymbolType type, SymbolValue value) {
   static int number = 0;
-  size_t temp_length = strlen(ST_TEMPORARY_VARIABLE_NAME) + strlen(itoa(number));
+  size_t temp_length = strlen(ST_TEMPORARY) + dlen(number);
   char * name = (char *) malloc((temp_length + 1) * sizeof(char));
 
   if(name == NULL)
     failwith("Failed to reserve memory for the identifier of a new temporary variable entry of given table of symbols");
 
-  if(snprintf(name, temp_length, "%s%d", ST_TEMPORARY_VARIABLE_NAME, number) != temp_length)
+  if(snprintf(name, temp_length, "%s%d", ST_TEMPORARY, number) != temp_length)
     failwith("Failed to compose the name for new temporary variable");
 
   table = sy_add_variable(table, name, true, type, value);
@@ -74,7 +133,7 @@ Symbol * sy_add_temporary(Symbol * table, SymbolType type, const void * value) {
   return table;
 }
 
-Symbol * sy_lookup(const Symbol * table, const char * identifier) {
+Symbol * sy_lookup(Symbol * table, const char * identifier) {
   if(table == NULL)
     return NULL;
 
@@ -93,8 +152,8 @@ Symbol * sy_lookup(const Symbol * table, const char * identifier) {
   return NULL;
 }
 
-void sy_print(const Symbol * symbol) {
-  if(table == NULL) {
+void sy_print(Symbol * symbol) {
+  if(symbol == NULL) {
     printf("Empty symbol set\n");
     return;
   }
@@ -102,8 +161,8 @@ void sy_print(const Symbol * symbol) {
   Symbol * temp = symbol;
 
   while(temp != NULL) {
-    printf("%s\t%s\t%s\t", temp->identifier, (temp->constant ? "true" : "false"), );
-    // Print value
+    printf("%s\t%s\t%s\t", temp->identifier, (temp->constant ? "true" : "false"), sy_ttoc(temp->type));
+    sy_print_value(temp->value, temp->type);
 
     temp = temp->next;
   }
@@ -122,8 +181,10 @@ void sy_free(Symbol * symbol) {
     if(temp->identifier != NULL)
       free(temp->identifier);
 
-    if(temp->value != NULL)
-      free(temp->value);
+    if(temp->type == ST_INTEGER_ARRAY) {
+      free(temp->value.Array.array);
+      free(temp->value.Array.sizes);
+    }
 
     free(temp);
   }
