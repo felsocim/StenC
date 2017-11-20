@@ -7,11 +7,13 @@
 #include <stdbool.h>
 #include <unistd.h>
 #include <errno.h>
+#include <limits.h>
 
 extern const char * help_message;
 extern const char * usage_message;
 
 void failwith(const char *);
 void usage(const char *, int);
+int dlen(int);
 
 #endif
