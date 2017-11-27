@@ -6,3 +6,8 @@ obj/*
 
 # Binaries
 bin/*
+
+# Analyzers
+include/compiler.h
+src/compiler.c
+src/lexer.c
