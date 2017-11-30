@@ -8,7 +8,6 @@ typedef enum {
   OP_UNDEFINED,
   OP_ADD,
   OP_SUBTRACT,
-  OP_UMINUS,
   OP_MULTIPLY,
   OP_DIVIDE,
   OP_LT,
@@ -16,6 +15,7 @@ typedef enum {
   OP_EQ,
   OP_GE,
   OP_GT,
+  OP_UMINUS,
   OP_GOTO,
   OP_ASSIGN,
   OP_CALL_PRINT
@@ -34,6 +34,7 @@ char * qu_otoc(Operation);
 Quad * qu_generate(void);
 Quad * qu_concatenate(Quad *, Quad *);
 void qu_print(Quad *);
+void qu_assemble(Quad *, Symbol *, FILE *);
 void qu_free(Quad *);
 
 #endif // __QUAD_H
