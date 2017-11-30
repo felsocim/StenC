@@ -31,7 +31,6 @@ void sy_print_value(SymbolValue value, SymbolType type) {
       } while (sy_array_iterator_increment(current, value.Array.sizes, value.Array.dimension));
 
       free(current);
-      printf("\n");
       return;
   }
 
@@ -124,11 +123,12 @@ Symbol * sy_add_temporary(Symbol * table, SymbolType type, SymbolValue value) {
   if(name == NULL)
     failwith("Failed to reserve memory for the identifier of a new temporary variable entry of given table of symbols");
 
-  if(snprintf(name, temp_length, "%s%d", ST_TEMPORARY, number) != temp_length)
-    failwith("Failed to compose the name for new temporary variable");
+  sprintf(name, "%s%d", ST_TEMPORARY, number);
 
   table = sy_add_variable(table, name, true, type, value);
   free(name);
+
+  number++;
 
   return table;
 }
@@ -161,8 +161,12 @@ void sy_print(Symbol * symbol) {
   Symbol * temp = symbol;
 
   while(temp != NULL) {
-    printf("%s\t%s\t%s\t", temp->identifier, (temp->constant ? "true" : "false"), sy_ttoc(temp->type));
-    sy_print_value(temp->value, temp->type);
+    printf("%s\t%s\t%s\t", temp->identifier, (temp->constant ? "constant" : "variable"), sy_ttoc(temp->type));
+    if(temp->constant)
+      sy_print_value(temp->value, temp->type);
+    else
+      printf("N/A");
+    printf("\n");
 
     temp = temp->next;
   }
