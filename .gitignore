@@ -11,3 +11,6 @@ bin/*
 include/compiler.h
 src/compiler.c
 src/lexer.c
+
+# Test files
+test.txt
