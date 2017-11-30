@@ -13,16 +13,17 @@
     Quad * code;
   } symbol;
 }
-
-%token INT TAB MAIN PRINT END
+%define parse.error verbose
+%token INT TAB MAIN PRINT END IF ELSE WHILE
 %token <value> NUMBER
+%token <value> OPBOOL
 %token <name> ID
 %type <symbol> list statement variable declaration assignment expression
 %left '+' '-'
 %left '*' '/'
 %left UMINUS
 %left '('
-
+%left OPBOOL
 %%
 
 init:
@@ -39,7 +40,27 @@ list:
   | statement ';' {
       $$.code = $1.code;
     }
+  | structControl list {}
+  | structControl {}
   ;
+
+structControl:
+  IF '(' exprBool ')' '{' list '}' {printf("if sans else\n");}
+  | IF '(' exprBool ')' '{' list '}' ELSE '{' list '}' {printf("if avec else\n");}
+  | WHILE '(' exprBool ')' '{' list '}'	{printf("boucle while\n");}
+;
+
+exprBool:
+	bool
+	| exprBool '&' bool
+	| exprBool '|' bool 
+	;
+
+bool:
+	expression OPBOOL expression
+	| ID
+	| NUMBER
+	;
 
 statement:
   INT variable {
@@ -63,6 +84,7 @@ statement:
         break;
     }
   }
+  //| IF
   ;
 
 variable:
