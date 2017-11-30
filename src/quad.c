@@ -6,6 +6,8 @@ char * qu_otoc(Operation operation) {
       return "+";
     case OP_SUBTRACT:
       return "-";
+    case OP_UMINUS:
+      return "UM";
     case OP_MULTIPLY:
       return "*";
     case OP_DIVIDE:
@@ -15,13 +17,17 @@ char * qu_otoc(Operation operation) {
     case OP_LE:
       return "<=";
     case OP_EQ:
-      return "=";
+      return "==";
     case OP_GE:
       return ">=";
     case OP_GT:
       return ">";
     case OP_GOTO:
       return "goto";
+    case OP_ASSIGN:
+      return "=";
+    case OP_CALL_PRINT:
+      return "print";
     case OP_UNDEFINED:
       return "N/A";
     default:
@@ -73,7 +79,7 @@ void qu_print(Quad * quad) {
   Quad * temp = quad;
 
   while(temp != NULL) {
-    printf("%s\t%s\t%s\t%s\n", qu_otoc(temp->op), temp->arg1->identifier, temp->arg2->identifier, temp->result->identifier);
+    printf("%s\t%s\t%s\t%s\n", qu_otoc(temp->op), (temp->arg1 != NULL ? temp->arg1->identifier : "NULL"), (temp->arg2 != NULL ? temp->arg2->identifier : "NULL"), (temp->result != NULL ? temp->result->identifier : "NULL"));
     temp = temp->next;
   }
 }
@@ -82,10 +88,6 @@ void qu_free(Quad * quad) {
   while(quad != NULL) {
     Quad * temp = quad;
     quad = quad->next;
-
-    sy_free(temp->arg1);
-    sy_free(temp->arg2);
-    sy_free(temp->result);
 
     free(temp);
   }

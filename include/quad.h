@@ -8,6 +8,7 @@ typedef enum {
   OP_UNDEFINED,
   OP_ADD,
   OP_SUBTRACT,
+  OP_UMINUS,
   OP_MULTIPLY,
   OP_DIVIDE,
   OP_LT,
@@ -15,7 +16,9 @@ typedef enum {
   OP_EQ,
   OP_GE,
   OP_GT,
-  OP_GOTO
+  OP_GOTO,
+  OP_ASSIGN,
+  OP_CALL_PRINT
 } Operation;
 
 typedef struct s_quad {
