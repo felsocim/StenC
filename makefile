@@ -4,11 +4,17 @@ YACC = bison -d
 CFLAGS = -g -Wall
 LDFLAGS = -lfl -ly
 
-all: tos quad lexer grammar
-	$(CC) $(CFLAGS) obj/common.o obj/tos.o obj/quad.o src/lexer.c src/compiler.c -o bin/compiler $(LDFLAGS)
+all: compiler include/main.h
+	$(CC) $(CFLAGS) obj/*.o src/main.c -o bin/cc $(LDFLAGS)
 
 tests: tos src/test/table.c
 	$(CC) $(CFLAGS) obj/common.o obj/tos.o src/test/table.c -o bin/test/table.out
+
+compiler: tos quad analyzer include/main.h src/compiler.c
+	$(CC) $(CFLAGS) -c src/compiler.c -o obj/compiler.o
+
+analyzer: lexer grammar
+	$(CC) $(CFLAGS) -c src/lexer.c -o obj/lexer.o
 
 grammar: src/grammar.y
 	$(YACC) -o src/compiler.c --defines="include/compiler.h" src/grammar.y
