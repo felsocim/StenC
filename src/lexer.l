@@ -29,8 +29,7 @@ int	{return INT;}
 
 print	{	return PRINT;}
 
-if {	printf("if lu merci lex\n");
-	return IF;}		//STRUCTURE DE CONTROLE
+if {	return IF;}		//STRUCTURE DE CONTROLE
 else	{return ELSE;}
 while {return WHILE;}
 
@@ -48,10 +47,7 @@ while {return WHILE;}
 
 [,;{}] {return yytext[0];}
 
-== {printf("test a la con\n");
-	return OPBOOL; }
-
-[(==)(<=)(>=)(!=)<>] {printf("opbool lu %s\n",yytext);
+[(==)(<=)(>=)(!=)<>] {
 			if (strlen(yytext) == 2){
 				//yylval.value= yytext[0] + yytext[1];	
 				return  OPBOOL;}

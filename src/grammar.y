@@ -84,7 +84,6 @@ statement:
         break;
     }
   }
-  //| IF
   ;
 
 variable:
