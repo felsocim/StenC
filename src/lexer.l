@@ -3,6 +3,9 @@
 
 #include <stdio.h>
 #include <string.h>
+#include "../include/common.h"
+#include "../include/tos.h"
+#include "../include/quad.h"
 #include "../include/compiler.h"
 %}
 
@@ -10,34 +13,30 @@
 
 %option nounput
 %option noyywrap
+%option noinput
 
 identifier [a-zA-Z_]+[0-9a-zA-Z_]*
 number     [1-9][0-9]*
 tab			\[[0-9]+\]
 
 %%
-main {printf ("indentificateur special main\n");
-		return MAIN;}
+main {return MAIN;}
 
-return[ \t]0 { printf("fin du main\n");
-			return END;}
+return[ \t]0 {return END;}
 
-int	{printf("identificateur special int\n") ;
-		return INT;}
+int	{return INT;}
 
-{tab}	{
-			printf("tableau de %u elements\n", (unsigned int) yytext[1]);
-			return TAB;}
+print	{	return PRINT;}
 
-{identifier} { printf("identificateur : %s \n", yytext);
+{tab}	{	return TAB;}
+
+{identifier} { yylval.name = strdup(yytext);
 				return ID; }
 
-{number}    { printf("integer : %d \n", atoi(yytext));
-		yylval.valeur = atoi(yytext);
+{number}    { yylval.value = atoi(yytext);
                  return NUMBER; }
 
-[=()+\-\*]     { printf("operator number : %d \n", yytext[0] );
-               return yytext[0]; }
+[=()+\-\*]     { return yytext[0]; }
 
 [ \t\n]	; //ignore les espaces et tabs
 
