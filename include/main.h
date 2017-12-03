@@ -2,6 +2,7 @@
 #define __MAIN_H
 
 #include "../include/common.h"
+#include "../include/value.h"
 #include "../include/tos.h"
 #include "../include/quad.h"
 

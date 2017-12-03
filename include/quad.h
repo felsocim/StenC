@@ -2,10 +2,10 @@
 #define __QUAD_H
 
 #include "common.h"
+#include "value.h"
 #include "tos.h"
 
 typedef enum {
-  OP_UNDEFINED,
   OP_ADD,
   OP_SUBTRACT,
   OP_MULTIPLY,
@@ -13,8 +13,12 @@ typedef enum {
   OP_LT,
   OP_LE,
   OP_EQ,
+  OP_NE,
   OP_GE,
   OP_GT,
+  OP_OR,
+  OP_AND,
+  OP_NOT,
   OP_UMINUS,
   OP_GOTO,
   OP_ASSIGN,
@@ -29,7 +33,8 @@ typedef struct s_quad {
   struct s_quad * next;
 } Quad;
 
-char * qu_otoc(Operation);
+char * otos(Operation);
+Operation stobo(const char *);
 
 Quad * qu_generate(void);
 Quad * qu_concatenate(Quad *, Quad *);

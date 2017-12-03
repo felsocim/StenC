@@ -25,8 +25,11 @@ lexer: src/lexer.l
 quad: tos include/quad.h src/quad.c
 	$(CC) $(CFLAGS) -c src/quad.c -o obj/quad.o
 
-tos: common include/tos.h src/tos.c
+tos: common value include/tos.h src/tos.c
 	$(CC) $(CFLAGS) -c src/tos.c -o obj/tos.o
+
+value: common include/value.h src/value.c
+	$(CC) $(CFLAGS) -c src/value.c -o obj/value.o
 
 common: dirs include/common.h src/common.c
 	$(CC) $(CFLAGS) -c src/common.c -o obj/common.o
@@ -37,4 +40,4 @@ dirs:
 	test -d bin/test || mkdir bin/test
 
 clean:
-	rm -fr obj bin src/lexer.c include/compiler.h src/compiler.c
+	rm -fr obj bin src/lexer.c include/compiler.h src/compiler.c *.s

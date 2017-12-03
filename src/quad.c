@@ -1,13 +1,11 @@
 #include "../include/quad.h"
 
-char * qu_otoc(Operation operation) {
+char * otos(Operation operation) {
   switch(operation) {
     case OP_ADD:
       return "+";
     case OP_SUBTRACT:
       return "-";
-    case OP_UMINUS:
-      return "UM";
     case OP_MULTIPLY:
       return "*";
     case OP_DIVIDE:
@@ -22,19 +20,56 @@ char * qu_otoc(Operation operation) {
       return ">=";
     case OP_GT:
       return ">";
+    case OP_OR:
+      return "||";
+    case OP_AND:
+      return "&&";
+    case OP_UMINUS:
+      return "UM";
     case OP_GOTO:
       return "goto";
     case OP_ASSIGN:
       return "=";
     case OP_CALL_PRINT:
       return "print";
-    case OP_UNDEFINED:
-      return "N/A";
     default:
       failwith("Unknown operation type detected");
   }
 
   return NULL;
+}
+
+Operation stobo(const char * operator) {
+  if(operator == NULL)
+    failwith("Failed to read input operator! It cannot be NULL");
+
+  if(strcmp(operator, "<") == 0)
+    return OP_LT;
+
+  if(strcmp(operator, "<=") == 0)
+    return OP_LE;
+
+  if(strcmp(operator, "==") == 0)
+    return OP_EQ;
+
+  if(strcmp(operator, "!=") == 0)
+    return OP_NE;
+
+  if(strcmp(operator, ">=") == 0)
+    return OP_GE;
+
+  if(strcmp(operator, ">") == 0)
+    return OP_GT;
+
+  if(strcmp(operator, "||") == 0)
+    return OP_OR;
+
+  if(strcmp(operator, "&&") == 0)
+    return OP_AND;
+
+  failwith("Failed to determine boolean operator! Invalid input");
+
+  return 0;
 }
 
 Quad * qu_generate(void) {
@@ -43,7 +78,7 @@ Quad * qu_generate(void) {
   if(quad == NULL)
     failwith("Failed to reserve memory for new quad");
 
-  quad->op = OP_UNDEFINED;
+  quad->op = OP_ADD;
   quad->arg1 = NULL;
   quad->arg2 = NULL;
   quad->result = NULL;
@@ -79,7 +114,7 @@ void qu_print(Quad * quad) {
   Quad * temp = quad;
 
   while(temp != NULL) {
-    printf("%s\t%s\t%s\t%s\n", qu_otoc(temp->op), (temp->arg1 != NULL ? temp->arg1->identifier : "NULL"), (temp->arg2 != NULL ? temp->arg2->identifier : "NULL"), (temp->result != NULL ? temp->result->identifier : "NULL"));
+    printf("%s\t%s\t%s\t%s\n", otos(temp->op), (temp->arg1 != NULL ? temp->arg1->identifier : "NULL"), (temp->arg2 != NULL ? temp->arg2->identifier : "NULL"), (temp->result != NULL ? temp->result->identifier : "NULL"));
     temp = temp->next;
   }
 }
@@ -95,7 +130,7 @@ void qu_assemble(Quad * list, Symbol * table, FILE * output) {
     failwith("Failed to write heading to the assembly output file");
 
   while(temp != NULL) {
-    if(temp->op < OP_UMINUS) {
+    if(temp->op < OP_NOT) {
       if(fprintf(output, "lw $t0,%s\n", temp->arg1->identifier) < 0)
         failwith("Failed to write 'lw' assembly instruction to the output file");
 
@@ -126,9 +161,17 @@ void qu_assemble(Quad * list, Symbol * table, FILE * output) {
         break;
       case OP_EQ:
         break;
+      case OP_NE:
+        break;
       case OP_GE:
         break;
       case OP_GT:
+        break;
+      case OP_OR:
+        break;
+      case OP_AND:
+        break;
+      case OP_NOT:
         break;
       case OP_UMINUS:
         if(fprintf(output, "li $t0,0\n") < 0)
@@ -174,7 +217,6 @@ void qu_assemble(Quad * list, Symbol * table, FILE * output) {
         if(fprintf(output, "syscall\n") < 0)
           failwith("Failed to write 'syscall' assembly instruction to the output file");
         break;
-      case OP_UNDEFINED:
       default:
         failwith("Unknown or undefined operation type detected while assembling given list of quads");
     }
@@ -196,8 +238,8 @@ void qu_assemble(Quad * list, Symbol * table, FILE * output) {
   while(temp2 != NULL) {
     if(temp2->constant) {
       switch(temp2->type) {
-        case ST_INTEGER_VALUE:
-          if(fprintf(output, "%s: .word %d\n", temp2->identifier, temp2->value.integer) < 0)
+        case TYPE_INTEGER:
+          if(fprintf(output, "%s: .word %d\n", temp2->identifier, temp2->value->integer) < 0)
             failwith("Failed to write a variable initialization to the assembly output file");
           break;
         default:
@@ -205,7 +247,7 @@ void qu_assemble(Quad * list, Symbol * table, FILE * output) {
       }
     } else {
       switch(temp2->type) {
-        case ST_INTEGER_VALUE:
+        case TYPE_INTEGER:
           if(fprintf(output, "%s: .word 0\n", temp2->identifier) < 0)
             failwith("Failed to write a variable initialization to the assembly output file");
           break;
