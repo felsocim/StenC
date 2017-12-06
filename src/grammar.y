@@ -86,7 +86,41 @@ structControl:
     ql_free($3.truelist);
     ql_free($3.falselist);
   }
-  | IF '(' exprBool ')' '{' list '}' ELSE '{' list '}' {printf("if avec else\n");}
+  | IF '(' exprBool ')' '{' list '}' ELSE '{' list '}' {
+    Quad * ontrue = qu_generate(), * onfalse = qu_generate(), * after = qu_generate(), * goafter = qu_generate();
+
+    table = sy_add_label(table, NULL);
+
+    ontrue->op = OP_LABEL;
+    ontrue->result = table;
+
+    table = sy_add_label(table, NULL);
+
+    onfalse->op = OP_LABEL;
+    onfalse->result = table;
+
+    table = sy_add_label(table, NULL);
+
+    after->op = OP_LABEL;
+    after->result = table;
+
+    goafter->op = OP_GOTO;
+    goafter->result = after->result;
+
+    $3.truelist = ql_complete($3.truelist, ontrue->result);
+    $3.falselist = ql_complete($3.falselist, onfalse->result);
+
+    $$.code = $3.code;
+    $$.code = qu_concatenate($$.code, ontrue);
+    $$.code = qu_concatenate($$.code, $6.code);
+    $$.code = qu_concatenate($$.code, goafter);
+    $$.code = qu_concatenate($$.code, onfalse);
+    $$.code = qu_concatenate($$.code, $10.code);
+    $$.code = qu_concatenate($$.code, after);
+
+    ql_free($3.truelist);
+    ql_free($3.falselist);
+  }
   | WHILE '(' exprBool ')' '{' list '}'	{printf("boucle while\n");}
 ;
 
