@@ -121,7 +121,38 @@ structControl:
     ql_free($3.truelist);
     ql_free($3.falselist);
   }
-  | WHILE '(' exprBool ')' '{' list '}'	{printf("boucle while\n");}
+  | WHILE '(' exprBool ')' '{' list '}'	{
+    Quad * condition = qu_generate(), * ontrue = qu_generate(), * verify = qu_generate(), * onfalse = qu_generate();
+
+    table = sy_add_label(table, NULL);
+    condition->op = OP_LABEL;
+    condition->result = table;
+
+    verify->op = OP_GOTO;
+    verify->result = condition->result;
+
+    table = sy_add_label(table, NULL);
+
+    ontrue->op = OP_LABEL;
+    ontrue->result = table;
+
+    table = sy_add_label(table, NULL);
+
+    onfalse->op = OP_LABEL;
+    onfalse->result = table;
+
+    $3.truelist = ql_complete($3.truelist, ontrue->result);
+    $3.falselist = ql_complete($3.falselist, onfalse->result);
+
+    $$.code = qu_concatenate(condition, $3.code);
+    $$.code = qu_concatenate($$.code, ontrue);
+    $$.code = qu_concatenate($$.code, $6.code);
+    $$.code = qu_concatenate($$.code, verify);
+    $$.code = qu_concatenate($$.code, onfalse);
+
+    ql_free($3.truelist);
+    ql_free($3.falselist);
+  }
 ;
 
 exprBool:
