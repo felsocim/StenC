@@ -18,7 +18,7 @@
 %option noinput
 
 identifier [a-zA-Z_]+[0-9a-zA-Z_]*
-number     [1-9][0-9]*
+number     0|([1-9][0-9]*)
 tab			\[[0-9]+\]
 
 
