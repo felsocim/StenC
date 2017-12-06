@@ -13,7 +13,7 @@ src/compiler.c
 src/lexer.c
 
 # Test files
-test.txt
+test/*
 
 # Output files
 *.s
