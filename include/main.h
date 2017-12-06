@@ -5,6 +5,7 @@
 #include "../include/value.h"
 #include "../include/tos.h"
 #include "../include/quad.h"
+#include "../include/qlist.h"
 
 extern Symbol * table;
 extern Quad * list;

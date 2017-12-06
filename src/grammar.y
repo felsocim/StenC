@@ -15,8 +15,8 @@
   } generic;
   struct {
     Symbol * pointer;
-    Quad * code,
-      * truelist,
+    Quad * code;
+    QList * truelist,
       * falselist;
   } boolean;
 }
@@ -28,7 +28,7 @@
 %token <operator> BOP_COMPARISON BOP_OR BOP_AND BOP_NOT
 %token <name> ID
 %type <generic> list statement variable declaration assignment expression
-%type <boolean> bool
+%type <boolean> bool exprBool
 %left '+' '-'
 %left '*' '/'
 %left UMINUS
@@ -64,16 +64,34 @@ structControl:
 ;
 
 exprBool:
-	| exprBool BOP_AND exprBool {
-    //complete lists
-    $$.code = qu_concatenate($1.code, $3.code);
+	exprBool BOP_AND exprBool {
+    Quad * label = qu_generate();
+
+    table = sy_add_label(table, NULL);
+
+    label->op = OP_LABEL;
+    label->result = table;
+
+    $1.truelist = ql_complete($1.truelist, table);
+    $$.code = $1.code;
+    $$.code = qu_concatenate($$.code, label);
+    $$.code = qu_concatenate($$.code, $3.code);
     $$.truelist = $3.truelist;
-    $$.falselist = qu_concatenate($1.falselist, $3.falselist);
+    $$.falselist = ql_concatenate($1.falselist, $3.falselist);
   }
 	| exprBool BOP_OR exprBool {
-    //complete lists
-    $$.code = qu_concatenate($1.code, $3.code);
-    $$.truelist = qu_concatenate($1.truelist, $3.truelist);
+    Quad * label = qu_generate();
+
+    table = sy_add_label(table, NULL);
+
+    label->op = OP_LABEL;
+    label->result = table;
+
+    $1.falselist = ql_complete($1.falselist, table);
+    $$.code = $1.code;
+    $$.code = qu_concatenate($$.code, label);
+    $$.code = qu_concatenate($$.code, $3.code);
+    $$.truelist = ql_concatenate($1.truelist, $3.truelist);
     $$.falselist = $3.falselist;
   }
   | BOP_NOT exprBool {
@@ -86,7 +104,11 @@ exprBool:
     $$.truelist = $2.truelist;
     $$.falselist = $2.falselist;
   }
-  | bool
+  | bool {
+    $$.code = $1.code;
+    $$.truelist = $1.truelist;
+    $$.falselist = $1.falselist;
+  }
 	;
 
 bool:
@@ -100,8 +122,10 @@ bool:
 
       onfalse->op = OP_GOTO;
 
-      $$.truelist = ontrue;
-      $$.falselist = onfalse;
+      $$.truelist = ql_init(QL_GROW_SIZE);
+      $$.truelist = ql_insert($$.truelist, ontrue);
+      $$.falselist = ql_init(QL_GROW_SIZE);
+      $$.falselist = ql_insert($$.falselist, onfalse);
       $$.code = qu_concatenate(ontrue, onfalse);
       $$.code = qu_concatenate($$.code, $1.code);
       $$.code = qu_concatenate($$.code, $3.code);
@@ -109,10 +133,6 @@ bool:
       fprintf(stderr, "Syntax error: Comparison is possible only if both operands have integer type!\n");
       exit(EXIT_FAILURE);
     }
-  }
-	| expression {
-    $$.pointer = $1.pointer;
-    $$.code = $1.code;
   }
 	;
 
@@ -124,6 +144,13 @@ statement:
       $$.code = $1.code;
     }
   | PRINTI '(' expression ')' {
+    Quad * n = qu_generate();
+
+    n->op = OP_CALL_PRINT;
+    n->arg1 = $3.pointer;
+    $$.code = qu_concatenate($3.code, n);
+  }
+  | PRINTI '(' exprBool ')' {
     Quad * n = qu_generate();
 
     n->op = OP_CALL_PRINT;
@@ -176,6 +203,75 @@ assignment:
     n->result = $$.pointer;
     $$.code = qu_concatenate($3.code, n);
   }
+  | ID '=' exprBool {
+    Symbol * symbol = NULL, * result = NULL, * zero = NULL, * one = NULL;
+    Quad * ontrue = qu_generate(), * onfalse = qu_generate(), * after = qu_generate(), * n = qu_generate(), * ontruev = qu_generate(), * onfalsev = qu_generate(), * goafter = qu_generate();
+
+    table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
+    result = table;
+
+    Value * v0 = va_alloc(), * v1 = va_alloc();
+    v0->integer = 0;
+    v1->integer = 1;
+
+    table = sy_add_temporary(table, true, TYPE_INTEGER, v0);
+    zero = table;
+
+    table = sy_add_temporary(table, true, TYPE_INTEGER, v1);
+    one = table;
+
+    if((symbol = sy_lookup(table, $1)) == NULL) {
+      table = sy_add_variable(table, $1, false, $3.pointer->type, NULL);
+      $$.pointer = table;
+    } else {
+      $$.pointer = symbol;
+    }
+
+    n->op = OP_ASSIGN;
+    n->arg1 = result;
+    n->result = $$.pointer;
+
+    table = sy_add_label(table, NULL);
+
+    ontrue->op = OP_LABEL;
+    ontrue->result = table;
+
+    table = sy_add_label(table, NULL);
+
+    onfalse->op = OP_LABEL;
+    onfalse->result = table;
+
+    table = sy_add_label(table, NULL);
+
+    after->op = OP_LABEL;
+    after->result = table;
+
+    ontruev->op = OP_ASSIGN;
+    ontruev->arg1 = one;
+    ontruev->result = result;
+
+    onfalsev->op = OP_ASSIGN;
+    onfalsev->arg1 = zero;
+    onfalsev->result = result;
+
+    goafter->op = OP_GOTO;
+    goafter->result = after->result;
+
+    $3.truelist = ql_complete($3.truelist, ontrue->result);
+    $3.falselist = ql_complete($3.falselist, onfalse->result);
+
+    $$.code = $3.code;
+    $$.code = qu_concatenate($$.code, ontrue);
+    $$.code = qu_concatenate($$.code, ontruev);
+    $$.code = qu_concatenate($$.code, goafter);
+    $$.code = qu_concatenate($$.code, onfalse);
+    $$.code = qu_concatenate($$.code, onfalsev);
+    $$.code = qu_concatenate($$.code, after);
+    $$.code = qu_concatenate($$.code, n);
+
+    ql_free($3.truelist);
+    ql_free($3.falselist);
+  }
   ;
 
 expression :
@@ -183,7 +279,7 @@ expression :
     if($1.pointer->type == TYPE_INTEGER && $3.pointer->type == TYPE_INTEGER) {
       Quad * n = qu_generate();
 
-      table = sy_add_temporary(table, NULL, $1.pointer->type, NULL);
+      table = sy_add_temporary(table, false, $1.pointer->type, NULL);
       $$.pointer = table;
       n->op = OP_ADD;
       n->arg1 = $1.pointer;
@@ -200,7 +296,7 @@ expression :
     if($1.pointer->type == TYPE_INTEGER && $3.pointer->type == TYPE_INTEGER) {
       Quad * n = qu_generate();
 
-      table = sy_add_temporary(table, NULL, $1.pointer->type, NULL);
+      table = sy_add_temporary(table, false, $1.pointer->type, NULL);
       $$.pointer = table;
       n->op = OP_SUBTRACT;
       n->arg1 = $1.pointer;
@@ -217,7 +313,7 @@ expression :
     if($1.pointer->type == TYPE_INTEGER && $3.pointer->type == TYPE_INTEGER) {
       Quad * n = qu_generate();
 
-      table = sy_add_temporary(table, NULL, $1.pointer->type, NULL);
+      table = sy_add_temporary(table, false, $1.pointer->type, NULL);
       $$.pointer = table;
       n->op = OP_MULTIPLY;
       n->arg1 = $1.pointer;
@@ -234,7 +330,7 @@ expression :
     if($1.pointer->type == TYPE_INTEGER && $3.pointer->type == TYPE_INTEGER) {
       Quad * n = qu_generate();
 
-      table = sy_add_temporary(table, NULL, $1.pointer->type, NULL);
+      table = sy_add_temporary(table, false, $1.pointer->type, NULL);
       $$.pointer = table;
       n->op = OP_DIVIDE;
       n->arg1 = $1.pointer;
