@@ -89,7 +89,7 @@ void sy_print(Symbol * symbol) {
   while(temp != NULL) {
     printf("%s\t%s\t%s\t", temp->identifier, (temp->constant ? "constant" : "variable"), ttos(temp->type));
 
-    if(temp->constant)
+    if(temp->constant && temp->type != TYPE_LABEL)
       va_print(temp->value, temp->type);
     else
       printf("N/A");
