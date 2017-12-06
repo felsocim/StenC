@@ -31,11 +31,11 @@
 %type <boolean> bool exprBool
 %left '+' '-'
 %left '*' '/'
-%left UMINUS
+%nonassoc UMINUS
 %left '('
 %left BOP_COMPARISON BOP_OR
 %left BOP_AND
-%left BOP_NOT
+%nonassoc BOP_NOT
 %start init
 
 %%
@@ -129,6 +129,34 @@ bool:
       $$.code = qu_concatenate(ontrue, onfalse);
       $$.code = qu_concatenate($$.code, $1.code);
       $$.code = qu_concatenate($$.code, $3.code);
+    } else {
+      fprintf(stderr, "Syntax error: Comparison is possible only if both operands have integer type!\n");
+      exit(EXIT_FAILURE);
+    }
+  }
+  | BOP_NOT expression {
+    if($2.pointer->type == TYPE_INTEGER) {
+      Symbol * zero = NULL;
+      Quad * ontrue = qu_generate(), * onfalse = qu_generate();
+
+      Value * v0 = va_alloc();
+      v0->integer = 0;
+
+      table = sy_add_temporary(table, true, TYPE_INTEGER, v0);
+      zero = table;
+
+      ontrue->op = OP_EQ;
+      ontrue->arg1 = $2.pointer;
+      ontrue->arg2 = zero;
+
+      onfalse->op = OP_GOTO;
+
+      $$.truelist = ql_init(QL_GROW_SIZE);
+      $$.truelist = ql_insert($$.truelist, ontrue);
+      $$.falselist = ql_init(QL_GROW_SIZE);
+      $$.falselist = ql_insert($$.falselist, onfalse);
+      $$.code = qu_concatenate(ontrue, onfalse);
+      $$.code = qu_concatenate($$.code, $2.code);
     } else {
       fprintf(stderr, "Syntax error: Comparison is possible only if both operands have integer type!\n");
       exit(EXIT_FAILURE);
@@ -344,14 +372,19 @@ expression :
     }
   }
   | '-' expression %prec UMINUS {
-    Quad * n = qu_generate();
+    if($2.pointer->type == TYPE_INTEGER) {
+      Quad * n = qu_generate();
 
-    table = sy_add_temporary(table, false, $2.pointer->type, NULL);
-    $$.pointer = table;
-    n->op = OP_UMINUS;
-    n->arg1 = $2.pointer;
-    n->result = $$.pointer;
-    $$.code = qu_concatenate($2.code, n);
+      table = sy_add_temporary(table, false, $2.pointer->type, NULL);
+      $$.pointer = table;
+      n->op = OP_UMINUS;
+      n->arg1 = $2.pointer;
+      n->result = $$.pointer;
+      $$.code = qu_concatenate($2.code, n);
+    } else {
+      fprintf(stderr, "Syntax error: Unary minus is possible only if the operand has integer type!\n");
+      exit(EXIT_FAILURE);
+    }
   }
   | '(' expression ')' {
     $$.pointer = $2.pointer;
