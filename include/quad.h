@@ -16,12 +16,10 @@ typedef enum {
   OP_NE,
   OP_GE,
   OP_GT,
-  OP_OR,
-  OP_AND,
-  OP_NOT,
   OP_UMINUS,
-  OP_GOTO,
   OP_ASSIGN,
+  OP_LABEL,
+  OP_GOTO,
   OP_CALL_PRINT
 } Operation;
 

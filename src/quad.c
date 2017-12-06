@@ -20,16 +20,14 @@ char * otos(Operation operation) {
       return ">=";
     case OP_GT:
       return ">";
-    case OP_OR:
-      return "||";
-    case OP_AND:
-      return "&&";
     case OP_UMINUS:
       return "UM";
-    case OP_GOTO:
-      return "goto";
     case OP_ASSIGN:
       return "=";
+    case OP_LABEL:
+      return "label";
+    case OP_GOTO:
+      return "goto";
     case OP_CALL_PRINT:
       return "print";
     default:
@@ -60,12 +58,6 @@ Operation stobo(const char * operator) {
 
   if(strcmp(operator, ">") == 0)
     return OP_GT;
-
-  if(strcmp(operator, "||") == 0)
-    return OP_OR;
-
-  if(strcmp(operator, "&&") == 0)
-    return OP_AND;
 
   failwith("Failed to determine boolean operator! Invalid input");
 
@@ -130,7 +122,7 @@ void qu_assemble(Quad * list, Symbol * table, FILE * output) {
     failwith("Failed to write heading to the assembly output file");
 
   while(temp != NULL) {
-    if(temp->op < OP_NOT) {
+    if(temp->op <= OP_GT) {
       if(fprintf(output, "lw $t0,%s\n", temp->arg1->identifier) < 0)
         failwith("Failed to write 'lw' assembly instruction to the output file");
 
@@ -156,22 +148,28 @@ void qu_assemble(Quad * list, Symbol * table, FILE * output) {
           failwith("Failed to write 'div' assembly instruction to the output file");
         break;
       case OP_LT:
+        if(fprintf(output, "blt $t0,$t1,%s\n", temp->result->identifier) < 0)
+          failwith("Failed to write 'blt' assembly instruction to the output file");
         break;
       case OP_LE:
+        if(fprintf(output, "ble $t0,$t1,%s\n", temp->result->identifier) < 0)
+          failwith("Failed to write 'ble' assembly instruction to the output file");
         break;
       case OP_EQ:
+        if(fprintf(output, "beq $t0,$t1,%s\n", temp->result->identifier) < 0)
+          failwith("Failed to write 'beq' assembly instruction to the output file");
         break;
       case OP_NE:
+        if(fprintf(output, "bne $t0,$t1,%s\n", temp->result->identifier) < 0)
+          failwith("Failed to write 'bne' assembly instruction to the output file");
         break;
       case OP_GE:
+        if(fprintf(output, "bge $t0,$t1,%s\n", temp->result->identifier) < 0)
+          failwith("Failed to write 'bge' assembly instruction to the output file");
         break;
       case OP_GT:
-        break;
-      case OP_OR:
-        break;
-      case OP_AND:
-        break;
-      case OP_NOT:
+        if(fprintf(output, "bgt $t0,$t1,%s\n", temp->result->identifier) < 0)
+          failwith("Failed to write 'bgt' assembly instruction to the output file");
         break;
       case OP_UMINUS:
         if(fprintf(output, "li $t0,0\n") < 0)
@@ -183,11 +181,17 @@ void qu_assemble(Quad * list, Symbol * table, FILE * output) {
         if(fprintf(output, "sub $t0,$t0,$t1\n") < 0)
           failwith("Failed to write 'sub' assembly instruction to the output file");
         break;
-      case OP_GOTO:
-        break;
       case OP_ASSIGN:
         if(fprintf(output, "lw $t0,%s\n", temp->arg1->identifier) < 0)
           failwith("Failed to write 'lw' assembly instruction to the output file");
+        break;
+      case OP_LABEL:
+        if(fprintf(output, "%s:\n", temp->result->identifier) < 0)
+          failwith("Failed to write label to the output file");
+        break;
+      case OP_GOTO:
+        if(fprintf(output, "j %s\n", temp->result->identifier) < 0)
+          failwith("Failed to write 'j' assembly instruction to the output file");
         break;
       case OP_CALL_PRINT:
         if(fprintf(output, "li $v0,4\n") < 0)
@@ -221,7 +225,7 @@ void qu_assemble(Quad * list, Symbol * table, FILE * output) {
         failwith("Unknown or undefined operation type detected while assembling given list of quads");
     }
 
-    if(temp->op < OP_CALL_PRINT) {
+    if(temp->op <= OP_DIVIDE || temp->op == OP_UMINUS || temp->op == OP_ASSIGN) {
       if(fprintf(output, "sw $t0,%s\n", temp->result->identifier) < 0)
         failwith("Failed to write 'sw' assembly instruction to the output file");
     }
@@ -232,7 +236,7 @@ void qu_assemble(Quad * list, Symbol * table, FILE * output) {
   if(fprintf(output, "li $v0,10\nsyscall\n") < 0)
     failwith("Failed to write exit sequence to the assembly output file");
 
-  if(fprintf(output, "  .data\nresult_string: .asciiz \"Integer value: \"\n") < 0)
+  if(fprintf(output, "  .data\nresult_string: .asciiz \"Value: \"\n") < 0)
     failwith("Failed to write variable initialization sequence beginning to the assembly output file");
 
   while(temp2 != NULL) {
