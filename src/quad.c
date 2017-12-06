@@ -16,6 +16,8 @@ char * otos(Operation operation) {
       return "<=";
     case OP_EQ:
       return "==";
+    case OP_NE:
+      return "!=";
     case OP_GE:
       return ">=";
     case OP_GT:
