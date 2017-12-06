@@ -27,7 +27,7 @@
 %token <value> NUMBER
 %token <operator> BOP_COMPARISON BOP_OR BOP_AND BOP_NOT
 %token <name> ID
-%type <generic> list statement variable declaration assignment expression
+%type <generic> list statement structControl variable declaration assignment expression
 %type <boolean> bool exprBool
 %left '+' '-'
 %left '*' '/'
@@ -48,17 +48,44 @@ init:
 
 list:
 	statement ';' list {
-      $$.code = qu_concatenate($1.code, $3.code);
-    }
+    $$.code = qu_concatenate($1.code, $3.code);
+  }
   | statement ';' {
-      $$.code = $1.code;
-    }
-  | structControl list {}
-  | structControl {}
+    $$.code = $1.code;
+  }
+  | structControl list {
+    $$.code = qu_concatenate($1.code, $2.code);
+  }
+  | structControl {
+    $$.code = $1.code;
+  }
   ;
 
 structControl:
-  IF '(' exprBool ')' '{' list '}' {printf("if sans else\n");}
+  IF '(' exprBool ')' '{' list '}' {
+    Quad * ontrue = qu_generate(), * onfalse = qu_generate();
+
+    table = sy_add_label(table, NULL);
+
+    ontrue->op = OP_LABEL;
+    ontrue->result = table;
+
+    table = sy_add_label(table, NULL);
+
+    onfalse->op = OP_LABEL;
+    onfalse->result = table;
+
+    $3.truelist = ql_complete($3.truelist, ontrue->result);
+    $3.falselist = ql_complete($3.falselist, onfalse->result);
+
+    $$.code = $3.code;
+    $$.code = qu_concatenate($$.code, ontrue);
+    $$.code = qu_concatenate($$.code, $6.code);
+    $$.code = qu_concatenate($$.code, onfalse);
+
+    ql_free($3.truelist);
+    ql_free($3.falselist);
+  }
   | IF '(' exprBool ')' '{' list '}' ELSE '{' list '}' {printf("if avec else\n");}
   | WHILE '(' exprBool ')' '{' list '}'	{printf("boucle while\n");}
 ;
