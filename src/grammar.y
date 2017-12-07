@@ -23,7 +23,7 @@
 
 %define parse.error verbose
 
-%token INT TAB MAIN PRINTI END IF ELSE WHILE
+%token INT TAB MAIN PRINTI END IF ELSE WHILE STENCIL INITTAB
 %token <value> NUMBER
 %token <operator> BOP_COMPARISON BOP_OR BOP_AND BOP_NOT
 %token <name> ID
@@ -277,6 +277,8 @@ statement:
     n->arg1 = $3.pointer;
     $$.code = qu_concatenate($3.code, n);
   }
+  | STENCIL ID INITTAB '=' INITTAB {printf("StenC à une dimension reconnu");}
+  | STENCIL ID INITTAB '=' '{' INITTAB ',' INITTAB ',' INITTAB'}' {printf("StenC à deux dimension reconnu");}
   ;
 
 variable:

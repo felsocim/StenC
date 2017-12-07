@@ -20,10 +20,15 @@
 identifier [a-zA-Z_]+[0-9a-zA-Z_]*
 number     0|([1-9][0-9]*)
 tab			\[[0-9]+\]
+initTab \{([ \t\n]*{number}[ \t\n]*,)*([ \t\n]*{number})[ \t\n]*\}
 
 
 %%
 main { return MAIN; }
+
+stencil {return STENCIL;}
+{initTab} { printf("inittab reconnu;\n");
+			return INITTAB;}
 
 return[ \t]0 { return END; }
 
