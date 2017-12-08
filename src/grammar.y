@@ -413,6 +413,7 @@ assignment:
     ql_free($3.falselist);
   }
   | ID TAB '=' listInit {printf("tableau initialisee\n");}
+  | ID TAB '=' expression {}
   ;
 
 expression :
@@ -523,6 +524,9 @@ expression :
     $$.pointer = table;
     $$.code = NULL;
   }
+  | ID TAB {}
+  | ID '$' ID TAB {} /* ID correspond à un stencil ! */
+  | ID TAB '$' ID {}
   ;
 
 %%
