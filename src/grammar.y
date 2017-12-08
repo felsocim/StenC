@@ -290,12 +290,12 @@ statement:
     n->arg1 = table;
     $$.code = n;
   }
-  | STENCIL ID inittab '=' listInit {printf("StenC reconnu");}
+  | STENCIL ID '{' inittab '}' '=' listInit {printf("StenC reconnu");}
   ;
 
 listInit:
 	'{' listInit ',' listInit '}'
-	| inittab
+	| '{' inittab '}' {printf("inittab...\n");}
 	| '{' listInit '}'
 	;
 
