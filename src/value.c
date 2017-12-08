@@ -1,4 +1,5 @@
 #include "../include/value.h"
+#include <string.h>
 
 char * ttos(Type type) {
   switch(type) {

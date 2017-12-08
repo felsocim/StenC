@@ -19,16 +19,17 @@
 
 identifier [a-zA-Z_]+[0-9a-zA-Z_]*
 number     0|([1-9][0-9]*)
-tab			(\[[0-9]+\])+
+/*tab			(\[[0-9]+\])+
 initTab \{([ \t\n]*{number}[ \t\n]*,)*([ \t\n]*{number})[ \t\n]*\}
+{initTab} { printf("inittab reconnu;\n");
+			return INITTAB;}*/
 string	\"[\'0-9a-zA-Z ]*\"
 
 %%
 main { return MAIN; }
 
 stencil {return STENCIL;}
-{initTab} { printf("inittab reconnu;\n");
-			return INITTAB;}
+
 {string} { yylval.name = strdup(yytext); return STRING; }
 return[ \t]0 { return END; }
 
@@ -41,13 +42,11 @@ if { return IF; }		//STRUCTURE DE CONTROLE
 else { return ELSE; }
 while { return WHILE; }
 
-{tab}	{	return TAB;}
-
 {identifier} { yylval.name = strdup(yytext); return ID; }
 
 {number} { yylval.value = atoi(yytext); return NUMBER; }
 
-[\=\(\)\+\-\*]([\=]?) {
+[\=\(\)\+\-\*\$]([\=]?) {
   if(strlen(yytext) > 1) {
     yylval.operator = stobo(yytext); printf ("Operator --> %s\n", yytext); return BOP_COMPARISON;
   }
@@ -56,7 +55,7 @@ while { return WHILE; }
 
 [ \t\n]	; //ignore les espaces et tabs
 
-[,;{}] {return yytext[0];}
+[,;{}\[\]] {return yytext[0];}
 
 ([\<\>\!])([\=]?) {
   printf("OP len %lu\n", strlen(yytext));

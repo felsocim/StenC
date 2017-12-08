@@ -24,11 +24,10 @@
 
 %define parse.error verbose
 
-%token INT MAIN PRINTI PRINTF END IF ELSE WHILE STENCIL INITTAB STRING
+%token INT MAIN PRINTI PRINTF END IF ELSE WHILE STENCIL STRING
 %token <value> NUMBER
 %token <operator> BOP_COMPARISON BOP_OR BOP_AND BOP_NOT
 %token <name> ID
-%token <array> TAB
 %type <generic> list statement structControl variable declaration assignment expression
 %type <boolean> bool exprBool
 %left '+' '-'
@@ -291,14 +290,18 @@ statement:
     n->arg1 = table;
     $$.code = n;
   }
-  | STENCIL ID INITTAB '=' listInit {printf("StenC reconnu");}
+  | STENCIL ID inittab '=' listInit {printf("StenC reconnu");}
   ;
 
 listInit:
 	'{' listInit ',' listInit '}'
-	| INITTAB
+	| inittab
 	| '{' listInit '}'
 	;
+
+inittab:
+	inittab ',' NUMBER {}
+	|NUMBER {}
 
 variable:
   variable ',' declaration {
@@ -325,7 +328,7 @@ declaration:
 
     $$.code = NULL;
   }
-  | ID TAB {printf("tableau non-initialisee\n");}
+  | ID rtab {printf("tableau non-initialisee\n");}
   ;
 
 assignment:
@@ -414,8 +417,8 @@ assignment:
     ql_free($3.truelist);
     ql_free($3.falselist);
   }
-  | ID TAB '=' listInit {printf("tableau initialisee\n");}
-  | ID TAB '=' expression {}
+  | ID rtab '=' listInit {printf("tableau initialisee\n");}
+ // | ID rtab '=' expression {}
   ;
 
 expression :
@@ -526,9 +529,13 @@ expression :
     $$.pointer = table;
     $$.code = NULL;
   }
-  | ID TAB {}
-  | ID '$' ID TAB {} /* ID correspond à un stencil ! */
-  | ID TAB '$' ID {}
+  | ID rtab {}
+  | ID '$' ID rtab {} /* ID correspond à un stencil ! */
+  | ID rtab '$' ID {}
   ;
 
+rtab: 
+	rtab '[' NUMBER ']' {}
+	| '[' NUMBER ']' {}
+	;
 %%
