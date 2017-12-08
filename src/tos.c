@@ -59,6 +59,11 @@ Symbol * sy_add_label(Symbol * table, const char * name) {
   return table;
 }
 
+Symbol * sy_add_string(Symbol * table, Value * value) {
+  table = sy_add_temporary(table, true, TYPE_STRING, value);
+  return table;
+}
+
 Symbol * sy_lookup(Symbol * table, const char * identifier) {
   if(table == NULL)
     return NULL;

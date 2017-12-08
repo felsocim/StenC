@@ -6,11 +6,13 @@
 typedef enum {
   TYPE_INTEGER,
   TYPE_ARRAY,
-  TYPE_LABEL
+  TYPE_LABEL,
+  TYPE_STRING
 } Type;
 
 typedef union {
   int integer;
+  char * string;
   struct {
     int * values;
     size_t * sizes;

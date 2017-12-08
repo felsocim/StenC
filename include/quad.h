@@ -20,7 +20,8 @@ typedef enum {
   OP_ASSIGN,
   OP_LABEL,
   OP_GOTO,
-  OP_CALL_PRINT
+  OP_CALL_PRINTI,
+  OP_CALL_PRINTF
 } Operation;
 
 typedef struct s_quad {

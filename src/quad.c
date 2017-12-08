@@ -30,8 +30,10 @@ char * otos(Operation operation) {
       return "label";
     case OP_GOTO:
       return "goto";
-    case OP_CALL_PRINT:
-      return "print";
+    case OP_CALL_PRINTI:
+      return "printi";
+    case OP_CALL_PRINTF:
+      return "printf";
     default:
       failwith("Unknown operation type detected");
   }
@@ -195,7 +197,7 @@ void qu_assemble(Quad * list, Symbol * table, FILE * output) {
         if(fprintf(output, "j %s\n", temp->result->identifier) < 0)
           failwith("Failed to write 'j' assembly instruction to the output file");
         break;
-      case OP_CALL_PRINT:
+      case OP_CALL_PRINTI:
         if(fprintf(output, "li $v0,4\n") < 0)
           failwith("Failed to write 'li' assembly instruction to the output file");
 
@@ -210,6 +212,25 @@ void qu_assemble(Quad * list, Symbol * table, FILE * output) {
 
         if(fprintf(output, "lw $a0,%s\n", temp->arg1->identifier) < 0)
           failwith("Failed to write 'lw' assembly instruction to the output file");
+
+        if(fprintf(output, "syscall\n") < 0)
+          failwith("Failed to write 'syscall' assembly instruction to the output file");
+
+        if(fprintf(output, "li $v0,11\n") < 0)
+          failwith("Failed to write 'li' assembly instruction to the output file");
+
+        if(fprintf(output, "li $a0,0xA\n") < 0)
+          failwith("Failed to write 'li' assembly instruction to the output file");
+
+        if(fprintf(output, "syscall\n") < 0)
+          failwith("Failed to write 'syscall' assembly instruction to the output file");
+        break;
+      case OP_CALL_PRINTF:
+        if(fprintf(output, "li $v0,4\n") < 0)
+          failwith("Failed to write 'li' assembly instruction to the output file");
+
+        if(fprintf(output, "la $a0,%s\n", temp->arg1->identifier) < 0)
+          failwith("Failed to write 'la' assembly instruction to the output file");
 
         if(fprintf(output, "syscall\n") < 0)
           failwith("Failed to write 'syscall' assembly instruction to the output file");
@@ -242,24 +263,17 @@ void qu_assemble(Quad * list, Symbol * table, FILE * output) {
     failwith("Failed to write variable initialization sequence beginning to the assembly output file");
 
   while(temp2 != NULL) {
-    if(temp2->constant) {
-      switch(temp2->type) {
-        case TYPE_INTEGER:
-          if(fprintf(output, "%s: .word %d\n", temp2->identifier, temp2->value->integer) < 0)
-            failwith("Failed to write a variable initialization to the assembly output file");
-          break;
-        default:
-          break;
-      }
-    } else {
-      switch(temp2->type) {
-        case TYPE_INTEGER:
-          if(fprintf(output, "%s: .word 0\n", temp2->identifier) < 0)
-            failwith("Failed to write a variable initialization to the assembly output file");
-          break;
-        default:
-          break;
-      }
+    switch(temp2->type) {
+      case TYPE_INTEGER:
+        if(fprintf(output, "%s: .word %d\n", temp2->identifier, (temp2->constant ? temp2->value->integer : 0)) < 0)
+          failwith("Failed to write a variable initialization to the assembly output file");
+        break;
+      case TYPE_STRING:
+        if(fprintf(output, "%s: .asciiz %s\n", temp2->identifier, (temp2->constant ? temp2->value->string : "N/A")) < 0)
+          failwith("Failed to write a variable initialization to the assembly output file");
+        break;
+      default:
+        break;
     }
 
     temp2 = temp2->next;

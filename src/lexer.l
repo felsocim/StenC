@@ -21,7 +21,7 @@ identifier [a-zA-Z_]+[0-9a-zA-Z_]*
 number     0|([1-9][0-9]*)
 tab			(\[[0-9]+\])+
 initTab \{([ \t\n]*{number}[ \t\n]*,)*([ \t\n]*{number})[ \t\n]*\}
-string	\".*\"
+string	\"[\'0-9a-zA-Z ]*\"
 
 %%
 main { return MAIN; }
@@ -29,7 +29,7 @@ main { return MAIN; }
 stencil {return STENCIL;}
 {initTab} { printf("inittab reconnu;\n");
 			return INITTAB;}
-{string} {return STRING;}
+{string} { yylval.name = strdup(yytext); return STRING; }
 return[ \t]0 { return END; }
 
 int	{return INT; }

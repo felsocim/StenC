@@ -266,18 +266,29 @@ statement:
   | PRINTI '(' expression ')' {
     Quad * n = qu_generate();
 
-    n->op = OP_CALL_PRINT;
+    n->op = OP_CALL_PRINTI;
     n->arg1 = $3.pointer;
     $$.code = qu_concatenate($3.code, n);
   }
   | PRINTI '(' exprBool ')' {
     Quad * n = qu_generate();
 
-    n->op = OP_CALL_PRINT;
+    n->op = OP_CALL_PRINTI;
     n->arg1 = $3.pointer;
     $$.code = qu_concatenate($3.code, n);
   }
-  | PRINTF '(' STRING ')' {}
+  | PRINTF '(' STRING ')' {
+    Value * string = va_alloc();
+    Quad * n = qu_generate();
+
+    string->string = yylval.name;
+
+    table = sy_add_string(table, string);
+
+    n->op = OP_CALL_PRINTF;
+    n->arg1 = table;
+    $$.code = n;
+  }
   | STENCIL ID INITTAB '=' listInit {printf("StenC reconnu");}
   ;
 

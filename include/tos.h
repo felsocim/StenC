@@ -18,6 +18,7 @@ Symbol * sy_alloc(void);
 Symbol * sy_add_variable(Symbol *, const char *, bool, Type, Value *);
 Symbol * sy_add_temporary(Symbol *, bool, Type, Value *);
 Symbol * sy_add_label(Symbol *, const char *);
+Symbol * sy_add_string(Symbol *, Value *);
 Symbol * sy_lookup(Symbol *, const char *);
 void sy_print(Symbol *);
 void sy_free(Symbol *);

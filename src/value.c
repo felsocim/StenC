@@ -8,6 +8,8 @@ char * ttos(Type type) {
       return "array";
     case TYPE_LABEL:
       return "label";
+    case TYPE_STRING:
+      return "string";
   }
 
   return NULL;
@@ -41,6 +43,9 @@ void va_print(Value * value, Type type) {
 
       free(current);
       break;
+    case TYPE_STRING:
+      printf("%s", value->string);
+      break;
     default:
       failwith("Failed to determine symbol type");
   }
@@ -55,6 +60,8 @@ void va_free(Value * value, Type type) {
       if(value->array.sizes != NULL)
         free(value->array.sizes);
     }
+    if(type == TYPE_STRING && value->string != NULL)
+      free(value->string);
 
     free(value);
   }
