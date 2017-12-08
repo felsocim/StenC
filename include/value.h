@@ -26,7 +26,7 @@ Value * va_alloc();
 void va_print(Value *, Type);
 void va_free(Value *, Type);
 
-int va_array_get(Value *, size_t *);
+int * va_array_get(Value *, size_t *);
 bool va_array_forward(size_t *, const size_t *, size_t);
 
 #endif // __VALUE_H

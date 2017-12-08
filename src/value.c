@@ -38,7 +38,7 @@ void va_print(Value * value, Type type) {
       size_t * current = (size_t *) calloc(value->array.dimensions, sizeof(size_t));
 
       do {
-        printf(" %d |", va_array_get(value, current));
+        printf(" %d |", *va_array_get(value, current));
       } while (va_array_forward(current, value->array.sizes, value->array.dimensions));
 
       free(current);
@@ -68,7 +68,7 @@ void va_free(Value * value, Type type) {
 }
 
 
-int va_array_get(Value * value, size_t * address) {
+int * va_array_get(Value * value, size_t * address) {
   if(address == NULL)
     failwith("Failed to determine array value address! Provided coordinates cannot be NULL");
 
@@ -87,7 +87,7 @@ int va_array_get(Value * value, size_t * address) {
     temp = 1;
   }
 
-  return *(value->array.values + shift);
+  return (value->array.values + shift);
 }
 
 bool va_array_forward(size_t * iterator, const size_t * sizes, size_t dimensions) {

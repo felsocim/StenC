@@ -9,6 +9,7 @@
   int value;
   Operation operator;
   char * name;
+  Value * array;
   struct {
     Symbol * pointer;
     Quad * code;
@@ -23,10 +24,11 @@
 
 %define parse.error verbose
 
-%token INT TAB MAIN PRINTI PRINTF END IF ELSE WHILE STENCIL INITTAB STRING
+%token INT MAIN PRINTI PRINTF END IF ELSE WHILE STENCIL INITTAB STRING
 %token <value> NUMBER
 %token <operator> BOP_COMPARISON BOP_OR BOP_AND BOP_NOT
 %token <name> ID
+%token <array> TAB
 %type <generic> list statement structControl variable declaration assignment expression
 %type <boolean> bool exprBool
 %left '+' '-'
