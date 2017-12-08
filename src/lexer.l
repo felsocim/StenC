@@ -19,9 +19,9 @@
 
 identifier [a-zA-Z_]+[0-9a-zA-Z_]*
 number     0|([1-9][0-9]*)
-tab			\[[0-9]+\]
+tab			(\[[0-9]+\])+
 initTab \{([ \t\n]*{number}[ \t\n]*,)*([ \t\n]*{number})[ \t\n]*\}
-
+string	\".*\"
 
 %%
 main { return MAIN; }
@@ -29,12 +29,13 @@ main { return MAIN; }
 stencil {return STENCIL;}
 {initTab} { printf("inittab reconnu;\n");
 			return INITTAB;}
-
+{string} {return STRING;}
 return[ \t]0 { return END; }
 
 int	{return INT; }
 
 printi { return PRINTI; }
+printf {return PRINTF;}
 
 if { return IF; }		//STRUCTURE DE CONTROLE
 else { return ELSE; }

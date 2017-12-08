@@ -23,7 +23,7 @@
 
 %define parse.error verbose
 
-%token INT TAB MAIN PRINTI END IF ELSE WHILE STENCIL INITTAB
+%token INT TAB MAIN PRINTI PRINTF END IF ELSE WHILE STENCIL INITTAB STRING
 %token <value> NUMBER
 %token <operator> BOP_COMPARISON BOP_OR BOP_AND BOP_NOT
 %token <name> ID
@@ -277,9 +277,15 @@ statement:
     n->arg1 = $3.pointer;
     $$.code = qu_concatenate($3.code, n);
   }
-  | STENCIL ID INITTAB '=' INITTAB {printf("StenC à une dimension reconnu");}
-  | STENCIL ID INITTAB '=' '{' INITTAB ',' INITTAB ',' INITTAB'}' {printf("StenC à deux dimension reconnu");}
+  | PRINTF '(' STRING ')' {}
+  | STENCIL ID INITTAB '=' listInit {printf("StenC reconnu");}
   ;
+
+listInit:
+	'{' listInit ',' listInit '}'
+	| INITTAB
+	| '{' listInit '}'
+	;
 
 variable:
   variable ',' declaration {
@@ -306,6 +312,7 @@ declaration:
 
     $$.code = NULL;
   }
+  | ID TAB {printf("tableau non-initialisee\n");}
   ;
 
 assignment:
@@ -394,6 +401,7 @@ assignment:
     ql_free($3.truelist);
     ql_free($3.falselist);
   }
+  | ID TAB '=' listInit {printf("tableau initialisee\n");}
   ;
 
 expression :
