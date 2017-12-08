@@ -512,10 +512,10 @@ expression :
   | ID {
     Symbol * symbol = NULL;
 
-    if((symbol = sy_lookup(table, yylval.name)) != NULL) {
+    if((symbol = sy_lookup(table, $1)) != NULL) {
       $$.pointer = symbol;
     } else {
-      fprintf(stderr, "Syntax error: %s is undeclared!\n", yylval.name);
+      fprintf(stderr, "Syntax error: %s is undeclared!\n", $1);
       exit(EXIT_FAILURE);
     }
 
@@ -524,7 +524,7 @@ expression :
   | NUMBER {
     Value * value = va_alloc();
 
-    value->integer = yylval.value;
+    value->integer = $1;
     table = sy_add_temporary(table, true, TYPE_INTEGER, value);
     $$.pointer = table;
     $$.code = NULL;
@@ -534,7 +534,7 @@ expression :
   | ID rtab '$' ID {}
   ;
 
-rtab: 
+rtab:
 	rtab '[' NUMBER ']' {}
 	| '[' NUMBER ']' {}
 	;
