@@ -18,6 +18,7 @@ typedef enum {
   OP_GT,
   OP_UMINUS,
   OP_ASSIGN,
+  OP_ASSIGN_ARRAY_VALUE,
   OP_LABEL,
   OP_GOTO,
   OP_CALL_PRINTI,
