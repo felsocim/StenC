@@ -110,6 +110,7 @@ void qu_print(Quad * quad) {
   Quad * temp = quad;
 
   while(temp != NULL) {
+    printf("%s\n", otos(temp->op));
     printf("%s\t%s\t%s\t%s\n", otos(temp->op), (temp->arg1 != NULL ? temp->arg1->identifier : "NULL"), (temp->arg2 != NULL ? temp->arg2->identifier : "NULL"), (temp->result != NULL ? temp->result->identifier : "NULL"));
     temp = temp->next;
   }

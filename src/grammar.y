@@ -20,6 +20,7 @@
     QList * truelist,
       * falselist;
   } boolean;
+  intList* iList;
 }
 
 %define parse.error verbose
@@ -30,6 +31,7 @@
 %token <name> ID
 %type <generic> list statement structControl variable declaration assignment expression
 %type <boolean> bool exprBool
+%type <iList> inittab listInit
 %left '+' '-'
 %left '*' '/'
 %nonassoc UMINUS
@@ -290,18 +292,20 @@ statement:
     n->arg1 = table;
     $$.code = n;
   }
-  | STENCIL ID '{' inittab '}' '=' listInit {printf("StenC reconnu");}
+  | STENCIL ID '{' inittab '}' '=' listInit {printf("StenC reconnu, liste du stencil :\n");
+						print_intList($7);}
   ;
 
 listInit:
-	'{' listInit ',' listInit '}'
-	| '{' inittab '}' {printf("inittab...\n");}
-	| '{' listInit '}'
+	listInit ',' listInit  {$$ = intListConcat($1,$3);}
+	| '{' inittab '}' { $$ = $2; }
+	| '{' listInit '}' {$$ = $2;}
 	;
 
 inittab:
-	inittab ',' NUMBER {}
-	|NUMBER {}
+	inittab ',' NUMBER { $$ = intListPushBack($1,$3); }
+	|NUMBER {$$ = intListCreate();
+		$$ = intListPushBack($$,$1); }
 
 variable:
   variable ',' declaration {
