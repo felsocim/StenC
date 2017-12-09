@@ -10,7 +10,7 @@ all: compiler include/main.h
 tests: tos src/test/table.c
 	$(CC) $(CFLAGS) obj/common.o obj/tos.o src/test/table.c -o bin/test/table.out
 
-compiler: tos quad qlist analyzer include/main.h src/compiler.c
+compiler: tos quad qlist analyzer tab include/main.h src/compiler.c
 	$(CC) $(CFLAGS) -c src/compiler.c -o obj/compiler.o
 
 analyzer: lexer grammar
@@ -31,8 +31,11 @@ quad: tos include/quad.h src/quad.c
 tos: common value include/tos.h src/tos.c
 	$(CC) $(CFLAGS) -c src/tos.c -o obj/tos.o
 
-value: common include/value.h src/value.c
+value: tab common include/value.h src/value.c
 	$(CC) $(CFLAGS) -c src/value.c -o obj/value.o
+
+tab: common include/tab.h src/tab.c
+	$(CC) $(CFLAGS) -c src/tab.c -o obj/tab.o
 
 common: dirs include/common.h src/common.c
 	$(CC) $(CFLAGS) -c src/common.c -o obj/common.o
