@@ -8,6 +8,7 @@
 #include "../include/tos.h"
 #include "../include/quad.h"
 #include "../include/qlist.h"
+#include "../include/slist.h"
 #include "../include/compiler.h"
 %}
 
