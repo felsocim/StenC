@@ -25,6 +25,7 @@ char * otos(Operation operation) {
     case OP_UMINUS:
       return "UM";
     case OP_ASSIGN:
+    case OP_ASSIGN_ARRAY_VALUE:
       return "=";
     case OP_LABEL:
       return "label";
@@ -189,6 +190,12 @@ void qu_assemble(Quad * list, Symbol * table, FILE * output) {
         if(fprintf(output, "lw $t0,%s\n", temp->arg1->identifier) < 0)
           failwith("Failed to write 'lw' assembly instruction to the output file");
         break;
+      case OP_ASSIGN_ARRAY_VALUE:
+        if(fprintf(output, "lw $t2,%s\n", temp->arg2->identifier) < 0)
+          failwith("Failed to write 'lw' assembly instruction to the output file");
+        if(fprintf(output, "lw $t0,%s($t2)\n", temp->arg1->identifier) < 0)
+          failwith("Failed to write 'lw' assembly instruction to the output file");
+        break;
       case OP_LABEL:
         if(fprintf(output, "%s:\n", temp->result->identifier) < 0)
           failwith("Failed to write label to the output file");
@@ -248,9 +255,16 @@ void qu_assemble(Quad * list, Symbol * table, FILE * output) {
         failwith("Unknown or undefined operation type detected while assembling given list of quads");
     }
 
-    if(temp->op <= OP_DIVIDE || temp->op == OP_UMINUS || temp->op == OP_ASSIGN) {
-      if(fprintf(output, "sw $t0,%s\n", temp->result->identifier) < 0)
-        failwith("Failed to write 'sw' assembly instruction to the output file");
+    if(temp->op <= OP_DIVIDE || temp->op == OP_UMINUS || temp->op == OP_ASSIGN || temp->op == OP_ASSIGN_ARRAY_VALUE) {
+      if(temp->result->type == TYPE_ARRAY) {
+        if(fprintf(output, "lw $t1,%s\n", temp->arg2->identifier) < 0)
+          failwith("Failed to write 'lw' assembly instruction to the output file");
+        if(fprintf(output, "sw $t0,%s($t1)\n", temp->result->identifier) < 0)
+          failwith("Failed to write 'sw' assembly instruction to the output file");
+      } else {
+        if(fprintf(output, "sw $t0,%s\n", temp->result->identifier) < 0)
+          failwith("Failed to write 'sw' assembly instruction to the output file");
+      }
     }
 
     temp = temp->next;
@@ -262,11 +276,21 @@ void qu_assemble(Quad * list, Symbol * table, FILE * output) {
   if(fprintf(output, "  .data\nresult_string: .asciiz \"Value: \"\n") < 0)
     failwith("Failed to write variable initialization sequence beginning to the assembly output file");
 
+  size_t i = 0, size = 1;
+
   while(temp2 != NULL) {
     switch(temp2->type) {
       case TYPE_INTEGER:
         if(fprintf(output, "%s: .word %d\n", temp2->identifier, (temp2->constant ? temp2->value->integer : 0)) < 0)
           failwith("Failed to write a variable initialization to the assembly output file");
+        break;
+      case TYPE_ARRAY:
+        for(i = 0; i < temp2->value->array.dimensions; i++) {
+          size *= temp2->value->array.sizes[i];
+        }
+
+        if(fprintf(output, "%s: .space %lu\n", temp2->identifier, size * sizeof(int)) < 0)
+          failwith("Failed to write an array initialization to the assembly output file");
         break;
       case TYPE_STRING:
         if(fprintf(output, "%s: .asciiz %s\n", temp2->identifier, (temp2->constant ? temp2->value->string : "N/A")) < 0)
