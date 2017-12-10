@@ -48,7 +48,7 @@ while { return WHILE; }
 
 {number} { yylval.value = atoi(yytext); return NUMBER; }
 
-[\=\(\)\+\-\*\$]([\=]?) {
+[\=\(\)\+\-\*\$\/]([\=]?) {
   if(strlen(yytext) > 1) {
     yylval.operator = stobo(yytext); printf ("Operator --> %s\n", yytext); return BOP_COMPARISON;
   }
