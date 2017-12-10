@@ -29,7 +29,7 @@
 
 %define parse.error verbose
 
-%token INT MAIN PRINTI PRINTF END IF ELSE WHILE STENCIL STRING
+%token INT MAIN PRINTI PRINTF END IF ELSE WHILE STENCIL STRING FOR
 %token <value> NUMBER
 %token <operator> BOP_COMPARISON BOP_OR BOP_AND BOP_NOT
 %token <name> ID
@@ -161,6 +161,40 @@ structControl:
     ql_free($3.truelist);
     ql_free($3.falselist);
   }
+  | FOR '(' assignment ';' exprBool ';' assignment ')' '{' list '}' {
+
+Quad * condition = qu_generate(), * ontrue = qu_generate(), * verify = qu_generate(), * onfalse = qu_generate();
+
+    table = sy_add_label(table, NULL);
+    condition->op = OP_LABEL;
+    condition->result = table;
+
+    verify->op = OP_GOTO;
+    verify->result = condition->result;
+
+    table = sy_add_label(table, NULL);
+
+    ontrue->op = OP_LABEL;
+    ontrue->result = table;
+
+    table = sy_add_label(table, NULL);
+
+    onfalse->op = OP_LABEL;
+    onfalse->result = table;
+
+    $5.truelist = ql_complete($5.truelist, ontrue->result);
+    $5.falselist = ql_complete($5.falselist, onfalse->result);
+    $$.code = qu_concatenate($$.code, $3.code);
+    $$.code = qu_concatenate(condition, $5.code);
+    $$.code = qu_concatenate($$.code, ontrue);
+    $$.code = qu_concatenate($$.code, $10.code);
+    $$.code = qu_concatenate($$.code, $7.code);
+    $$.code = qu_concatenate($$.code, verify);
+    $$.code = qu_concatenate($$.code, onfalse);
+
+    ql_free($5.truelist);
+    ql_free($5.falselist);
+} 
 ;
 
 exprBool:
@@ -357,10 +391,13 @@ listInit:
 	;
 
 inittab:
-	inittab ',' NUMBER { $$ = intListPushBack($1,$3); }
+	inittab ',' '-' NUMBER { $$ = intListPushBack($1,-$4); }
+	| inittab ',' NUMBER { $$ = intListPushBack($1,$3); }
 	|NUMBER {$$ = intListCreate();
 		$$ = intListPushBack($$,$1); }
-
+	| '-' NUMBER {$$ = intListCreate();
+		$$ = intListPushBack($$,-$2); }
+;
 variable:
   variable ',' declaration {
     $$.code = qu_concatenate($1.code, $3.code);
