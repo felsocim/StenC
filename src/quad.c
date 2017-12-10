@@ -309,6 +309,7 @@ void qu_assemble(Quad * list, Symbol * table, FILE * output) {
           if(fprintf(output, "%s: .space %lu\n", temp2->identifier, size * sizeof(int)) < 0)
             failwith("Failed to write an array initialization to the assembly output file");
         }
+        size = 1;
         break;
       case TYPE_STRING:
         if(fprintf(output, "%s: .asciiz %s\n", temp2->identifier, (temp2->constant ? temp2->value->string : "N/A")) < 0)
