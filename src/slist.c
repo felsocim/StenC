@@ -1,5 +1,28 @@
 #include "../include/slist.h"
 
+size_t * sltost(SList * list) {
+  if(list == NULL)
+    failwith("Failed to convert separate symbol list to 'size_t' array! The input list cannot be NULL");
+
+  if(list->next == 0)
+  failwith("Failed to convert separate symbol list to 'size_t' array! The input list is empty");
+
+  size_t * array = (size_t *) malloc(list->next * sizeof(size_t));
+
+  if(array == NULL)
+    failwith("Failed to reserve memory for target 'size_t' array");
+
+  size_t i = 0;
+
+  for(i = 0; i < list->next; i++) {
+    printf("Size %d\n", list->values[i]->value->integer);
+    array[i] = (size_t) list->values[i]->value->integer;
+    printf("SizeA %lu\n", array[i]);
+  }
+
+  return array;
+}
+
 SList * sl_init(size_t size) {
   SList * list = (SList *) malloc(sizeof(SList));
 

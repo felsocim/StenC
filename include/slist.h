@@ -12,6 +12,7 @@ typedef struct s_symbol_list {
     next;
 } SList;
 
+size_t * sltost(SList *);
 SList * sl_init(size_t);
 SList * sl_grow(SList *);
 SList * sl_insert(SList *, Symbol *);
