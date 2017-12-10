@@ -297,8 +297,57 @@ statement:
     n->arg1 = table;
     $$.code = n;
   }
-  | STENCIL ID '{' inittab '}' '=' listInit {printf("StenC reconnu, liste du stencil :\n");
-						print_intList($7);}
+  | STENCIL ID '{' inittab '}' '=' listInit {
+    if($4->size != 2) {
+      fprintf(stderr, "Syntax error: Too %s parameters for type stencil of '%s'!\n", $4->size < 2 ? "few" : "much", $2);
+      exit(EXIT_FAILURE);
+    }
+
+    size_t dimensions = (size_t) intListGet($4, 1),
+      neighbors = (size_t) intListGet($4, 0),
+      i = 0;
+    int * current = NULL;
+    size_t * iterator = (size_t *) calloc(dimensions, sizeof(size_t));
+
+    if(iterator == NULL)
+      failwith("Failed to reserve memory for stencil array iterator");
+
+    Value * stencil = va_alloc();
+
+    stencil->array.sizes = (size_t *) malloc(dimensions * sizeof(size_t));
+
+    if(stencil->array.sizes == NULL)
+      failwith("Failed to reserve memory for stencil array sizes");
+
+    for(i = 0; i < dimensions; i++) {
+      stencil->array.sizes[i] = 2 * neighbors + 1;
+    }
+
+    stencil->array.dimensions = dimensions;
+
+    stencil->array.values = (int *) malloc(((size_t) pow((double) (2 * neighbors + 1), (double) dimensions)) * sizeof(int));
+
+    if(stencil->array.values == NULL)
+      failwith("Failed to reserve memory for stencil array values");
+
+    i = 0;
+
+    do {
+      current = va_array_get(stencil, iterator);
+      *current = intListGet($7, i);
+      i++;
+    } while(va_array_forward(iterator, stencil->array.sizes, stencil->array.dimensions)); // Add test on i
+
+    if(sy_lookup(table, $2) == NULL) {
+      table = sy_add_variable(table, $2, true, TYPE_ARRAY, stencil);
+      $$.pointer = table;
+    } else {
+      fprintf(stderr, "Syntax error: Identifier %s has already been declared in this scope!\n", $2);
+      exit(EXIT_FAILURE);
+    }
+
+    $$.code = NULL;
+  }
   ;
 
 listInit:

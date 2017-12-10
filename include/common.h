@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <limits.h>
+#include <math.h>
 
 extern const char * help_message;
 extern const char * usage_message;

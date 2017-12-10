@@ -2,7 +2,7 @@ CC = gcc
 LEX = flex
 YACC = bison -d
 CFLAGS = -g -Wall
-LDFLAGS = -lfl -ly
+LDFLAGS = -lfl -ly -lm
 
 all: compiler include/main.h
 	$(CC) $(CFLAGS) obj/*.o src/main.c -o bin/cc $(LDFLAGS)

@@ -289,8 +289,26 @@ void qu_assemble(Quad * list, Symbol * table, FILE * output) {
           size *= temp2->value->array.sizes[i];
         }
 
-        if(fprintf(output, "%s: .space %lu\n", temp2->identifier, size * sizeof(int)) < 0)
-          failwith("Failed to write an array initialization to the assembly output file");
+        if(temp2->constant) { // If array type is a constant it's a stencil
+          if(fprintf(output, "%s: .word ", temp2->identifier) < 0)
+            failwith("Failed to write a stencil initialization to the assembly output file");
+
+          int i = 0;
+          size_t * iterator = (size_t *) calloc(temp2->value->array.dimensions, sizeof(size_t));
+
+          if(iterator == NULL)
+            failwith("Failed to reserve memory for stencil array iterator");
+
+          do {
+            if(fprintf(output, "%d%s", *va_array_get(temp2->value, iterator), i == (size - 1) ? "\n" : ", ") < 0)
+              failwith("Failed to write a stencil initialization to the assembly output file");
+
+            i++;
+          } while(va_array_forward(iterator, temp2->value->array.sizes, temp2->value->array.dimensions));
+        } else {
+          if(fprintf(output, "%s: .space %lu\n", temp2->identifier, size * sizeof(int)) < 0)
+            failwith("Failed to write an array initialization to the assembly output file");
+        }
         break;
       case TYPE_STRING:
         if(fprintf(output, "%s: .asciiz %s\n", temp2->identifier, (temp2->constant ? temp2->value->string : "N/A")) < 0)
