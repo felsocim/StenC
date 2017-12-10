@@ -1111,24 +1111,19 @@ expression :
     $$.pointer = item;
   }
   | ID '$' ID rtab {
-    size_t i = 0, j = 0, c = 0, neighbors = 0;
-    size_t * it_array = (size_t *) malloc($4.dimensions * sizeof(size_t)),
-      * lim_array = (size_t *) malloc($4.dimensions * sizeof(size_t)),
-      * it_stencil = (size_t *) calloc($4.dimensions, sizeof(size_t)),
-      * positions = sltost($4.sizes);
-
-    if(it_array == NULL || lim_array == NULL || it_stencil == NULL)
-      failwith("Failed to reserve memory for iterators and/or limits");
+    int i = 0, j = 0; size_t neighbors = 0, dimensions = $4.dimensions;
 
     Value * v0 = va_alloc(),
       * v1 = va_alloc(),
-      * bytes = va_alloc();
+      * bytes = va_alloc(),
+      * vn = va_alloc();
     Symbol * stencil = NULL,
       * array = NULL,
       * sy_zero = NULL,
       * sy_one = NULL,
       * sy_bytes = NULL,
-      * result = NULL;
+      * result = NULL,
+      * sy_neighbors = NULL;
 
     if((stencil = sy_lookup(table, $1)) == NULL) {
       fprintf(stderr, "Syntax error: %s is undeclared!\n", $1);
@@ -1145,10 +1140,7 @@ expression :
 
     neighbors = (stencil->value->array.sizes[0] - 1) / 2;
 
-    for(i = 0; i < $4.dimensions; i++) {
-      it_array[i] = positions[i] - neighbors;
-      lim_array[i] = positions[i] + neighbors + 1;
-    }
+    printf("Neighbors -- %lu\n", neighbors);
 
     v0->integer = 0;
     v1->integer = 1;
@@ -1166,287 +1158,387 @@ expression :
     table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
     result = table;
 
+    vn->integer = (int) neighbors;
+
+    table = sy_add_temporary(table, true, TYPE_INTEGER, vn);
+    sy_neighbors = table;
+
     $$.code = NULL;
 
-    do {
-      Symbol * ar_shift = NULL,
-        * st_shift = NULL,
-        * ar_temp = NULL,
-        * ar_of_temp = NULL,
-        * st_temp = NULL,
-        * st_of_temp = NULL,
-        * ar_offset = NULL,
-        * st_offset = NULL,
-        * final_ar_temp = NULL,
-        * final_st_temp = NULL,
-        * final_temp1 = NULL,
-        * final_temp2 = NULL;
-      Quad * init_ar_shift = qu_generate(),
-        * init_st_shift = qu_generate(),
-        * init_ar_temp = qu_generate(),
-        * init_st_temp = qu_generate(),
-        * get_ar_offset_mult = qu_generate(),
-        * get_ar_offset_assign = qu_generate(),
-        * get_st_offset_mult = qu_generate(),
-        * get_st_offset_assign = qu_generate(),
-        * final_ar_assign = qu_generate(),
-        * final_st_assign = qu_generate(),
-        * final_mult = qu_generate(),
-        * final_add = qu_generate(),
-        * final_assign = qu_generate();
+    SList * sc_labels = sl_init(SL_GROW_SIZE), * f_labels = sl_init(SL_GROW_SIZE), * is = sl_init(SL_GROW_SIZE);
 
-      table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
-      ar_shift = table;
+    for(i = 0; i < dimensions; i++) {
+      Value * size = va_alloc();
+      Symbol * label = NULL,
+        * iterator = NULL,
+        * ith_size = NULL,
+        * ontrue = NULL,
+        * onfalse = NULL;
+      Quad * init_label = qu_generate(),
+        * label_ontrue = qu_generate(),
+        * condition = qu_generate(),
+        * j_false = qu_generate();
 
-      table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
-      st_shift = table;
+      table = sy_add_label(table, NULL);
+      label = table;
 
-      table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
-      ar_temp = table;
+      table = sy_add_temporary(table, false, TYPE_INTEGER, v0);
+      iterator = table;
 
-      table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
-      ar_of_temp = table;
+      is = sl_insert(is, iterator);
+      sc_labels = sl_insert(sc_labels, label);
 
-      table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
-      st_temp = table;
+      size->integer = stencil->value->array.sizes[i];
 
-      table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
-      st_of_temp = table;
+      table = sy_add_temporary(table, true, TYPE_INTEGER, size);
+      ith_size = table;
 
-      table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
-      ar_offset = table;
+      table = sy_add_label(table, NULL);
+      ontrue = table;
 
-      table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
-      st_offset = table;
+      table = sy_add_label(table, NULL);
+      onfalse = table;
 
-      table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
-      final_ar_temp = table;
+      f_labels = sl_insert(f_labels, onfalse);
 
-      table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
-      final_st_temp = table;
+      init_label->op = OP_LABEL;
+      init_label->result = label;
 
-      table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
-      final_temp1 = table;
+      condition->op = OP_LT;
+      condition->arg1 = iterator;
+      condition->arg2 = ith_size;
+      condition->result = ontrue;
 
-      table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
-      final_temp2 = table;
+      j_false->op = OP_GOTO;
+      j_false->result = onfalse;
 
-      init_ar_shift->op = OP_ASSIGN;
-      init_ar_shift->arg1 = sy_zero;
-      init_ar_shift->result = ar_shift;
+      label_ontrue->op = OP_LABEL;
+      label_ontrue->result = ontrue;
 
-      init_st_shift->op = OP_ASSIGN;
-      init_st_shift->arg1 = sy_zero;
-      init_st_shift->result = st_shift;
+      $$.code = qu_concatenate($$.code, init_label);
+      $$.code = qu_concatenate($$.code, condition);
+      $$.code = qu_concatenate($$.code, j_false);
+      $$.code = qu_concatenate($$.code, label_ontrue);
+    }
 
-      init_ar_temp->op = OP_ASSIGN;
-      init_ar_temp->arg1 = sy_one;
-      init_ar_temp->result = ar_temp;
+    Symbol * ar_shift = NULL,
+      * st_shift = NULL,
+      * ar_temp = NULL,
+      * ar_of_temp = NULL,
+      * st_temp = NULL,
+      * st_of_temp = NULL,
+      * ar_offset = NULL,
+      * st_offset = NULL;
+    Quad * init_ar_shift = qu_generate(),
+      * init_st_shift = qu_generate(),
+      * init_ar_temp = qu_generate(),
+      * init_st_temp = qu_generate(),
+      * get_ar_offset_mult = qu_generate(),
+      * get_ar_offset_assign = qu_generate(),
+      * get_st_offset_mult = qu_generate(),
+      * get_st_offset_assign = qu_generate();
 
-      init_st_temp->op = OP_ASSIGN;
-      init_st_temp->arg1 = sy_one;
-      init_st_temp->result = st_temp;
+    table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
+    ar_shift = table;
 
-      $$.code = qu_concatenate($$.code, init_ar_shift);
-      $$.code = qu_concatenate($$.code, init_st_shift);
-      $$.code = qu_concatenate($$.code, init_ar_temp);
-      $$.code = qu_concatenate($$.code, init_st_temp);
+    table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
+    st_shift = table;
 
-      for(i = 0; i < $4.dimensions; i++) {
-        for(j = i + 1; j < $4.dimensions; j++) {
-          Value * ar_current = va_alloc(),
-            * st_current = va_alloc();
-          Symbol * ar_inner_temp = NULL,
-            * ar_current_size = NULL,
-            * st_inner_temp = NULL,
-            * st_current_size = NULL;
-          Quad * ar_inner_mult = qu_generate(),
-            * ar_inner_assign = qu_generate(),
-            * st_inner_mult = qu_generate(),
-            * st_inner_assign = qu_generate();
+    table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
+    ar_temp = table;
 
-          table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
-          ar_inner_temp = table;
+    table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
+    ar_of_temp = table;
 
-          table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
-          st_inner_temp = table;
+    table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
+    st_temp = table;
 
-          ar_current->integer = (int) array->value->array.sizes[j];
-          st_current->integer = (int) stencil->value->array.sizes[j];
+    table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
+    st_of_temp = table;
 
-          table = sy_add_temporary(table, true, TYPE_INTEGER, ar_current);
-          ar_current_size = table;
+    table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
+    ar_offset = table;
 
-          table = sy_add_temporary(table, true, TYPE_INTEGER, st_current);
-          st_current_size = table;
+    table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
+    st_offset = table;
 
-          ar_inner_mult->op = OP_MULTIPLY;
-          ar_inner_mult->arg1 = ar_temp;
-          ar_inner_mult->arg2 = ar_current_size;
-          ar_inner_mult->result = ar_inner_temp;
+    init_ar_shift->op = OP_ASSIGN;
+    init_ar_shift->arg1 = sy_zero;
+    init_ar_shift->result = ar_shift;
 
-          ar_inner_assign->op = OP_ASSIGN;
-          ar_inner_assign->arg1 = ar_inner_temp;
-          ar_inner_assign->result = ar_temp;
+    init_st_shift->op = OP_ASSIGN;
+    init_st_shift->arg1 = sy_zero;
+    init_st_shift->result = st_shift;
 
-          st_inner_mult->op = OP_MULTIPLY;
-          st_inner_mult->arg1 = st_temp;
-          st_inner_mult->arg2 = st_current_size;
-          st_inner_mult->result = st_inner_temp;
+    init_ar_temp->op = OP_ASSIGN;
+    init_ar_temp->arg1 = sy_one;
+    init_ar_temp->result = ar_temp;
 
-          st_inner_assign->op = OP_ASSIGN;
-          st_inner_assign->arg1 = st_inner_temp;
-          st_inner_assign->result = st_temp;
+    init_st_temp->op = OP_ASSIGN;
+    init_st_temp->arg1 = sy_one;
+    init_st_temp->result = st_temp;
 
-          $$.code = qu_concatenate($$.code, ar_inner_mult);
-          $$.code = qu_concatenate($$.code, ar_inner_assign);
-          $$.code = qu_concatenate($$.code, st_inner_mult);
-          $$.code = qu_concatenate($$.code, st_inner_assign);
-        }
+    $$.code = qu_concatenate($$.code, init_ar_shift);
+    $$.code = qu_concatenate($$.code, init_st_shift);
+    $$.code = qu_concatenate($$.code, init_ar_temp);
+    $$.code = qu_concatenate($$.code, init_st_temp);
 
-        Value * ar_it_value = va_alloc(),
-          * st_it_value = va_alloc();
-        Symbol * ar_outer_temp1 = NULL,
-          * ar_outer_temp2 = NULL,
-          * ar_outer_temp3 = NULL,
-          * st_outer_temp1 = NULL,
-          * st_outer_temp2 = NULL,
-          * st_outer_temp3 = NULL;
-        Quad * outer_ar_mult = qu_generate(),
-          * outer_ar_add = qu_generate(),
-          * outer_ar_assign = qu_generate(),
-          * ar_temp_reset = qu_generate(),
-          * outer_st_mult = qu_generate(),
-          * outer_st_add = qu_generate(),
-          * outer_st_assign = qu_generate(),
-          * st_temp_reset = qu_generate();
+    for(i = 0; i < $4.dimensions; i++) {
+      for(j = i + 1; j < $4.dimensions; j++) {
+        Value * ar_current = va_alloc(),
+          * st_current = va_alloc();
+        Symbol * ar_inner_temp = NULL,
+          * ar_current_size = NULL,
+          * st_inner_temp = NULL,
+          * st_current_size = NULL;
+        Quad * ar_inner_mult = qu_generate(),
+          * ar_inner_assign = qu_generate(),
+          * st_inner_mult = qu_generate(),
+          * st_inner_assign = qu_generate();
 
         table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
-        ar_outer_temp1 = table;
+        ar_inner_temp = table;
 
         table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
-        ar_outer_temp2 = table;
+        st_inner_temp = table;
 
-        table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
-        st_outer_temp1 = table;
+        ar_current->integer = (int) array->value->array.sizes[j];
+        st_current->integer = (int) stencil->value->array.sizes[j];
 
-        table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
-        st_outer_temp2 = table;
+        table = sy_add_temporary(table, true, TYPE_INTEGER, ar_current);
+        ar_current_size = table;
 
-        ar_it_value->integer = (int) it_array[i];
-        st_it_value->integer = (int) it_stencil[j];
+        table = sy_add_temporary(table, true, TYPE_INTEGER, st_current);
+        st_current_size = table;
 
-        table = sy_add_temporary(table, true, TYPE_INTEGER, ar_it_value);
-        ar_outer_temp3 = table;
+        ar_inner_mult->op = OP_MULTIPLY;
+        ar_inner_mult->arg1 = ar_temp;
+        ar_inner_mult->arg2 = ar_current_size;
+        ar_inner_mult->result = ar_inner_temp;
 
-        table = sy_add_temporary(table, true, TYPE_INTEGER, st_it_value);
-        st_outer_temp3 = table;
+        ar_inner_assign->op = OP_ASSIGN;
+        ar_inner_assign->arg1 = ar_inner_temp;
+        ar_inner_assign->result = ar_temp;
 
-        outer_ar_mult->op = OP_MULTIPLY;
-        outer_ar_mult->arg1 = ar_outer_temp3;
-        outer_ar_mult->arg2 = ar_temp;
-        outer_ar_mult->result = ar_outer_temp1;
+        st_inner_mult->op = OP_MULTIPLY;
+        st_inner_mult->arg1 = st_temp;
+        st_inner_mult->arg2 = st_current_size;
+        st_inner_mult->result = st_inner_temp;
 
-        outer_ar_add->op = OP_ADD;
-        outer_ar_add->arg1 = ar_shift;
-        outer_ar_add->arg2 = ar_outer_temp1;
-        outer_ar_add->result = ar_outer_temp2;
+        st_inner_assign->op = OP_ASSIGN;
+        st_inner_assign->arg1 = st_inner_temp;
+        st_inner_assign->result = st_temp;
 
-        outer_ar_assign->op = OP_ASSIGN;
-        outer_ar_assign->arg1 = ar_outer_temp2;
-        outer_ar_assign->result = ar_shift;
-
-        ar_temp_reset->op = OP_ASSIGN;
-        ar_temp_reset->arg1 = sy_one;
-        ar_temp_reset->result = ar_temp;
-
-        outer_st_mult->op = OP_MULTIPLY;
-        outer_st_mult->arg1 = st_outer_temp3;
-        outer_st_mult->arg2 = st_temp;
-        outer_st_mult->result = st_outer_temp1;
-
-        outer_st_add->op = OP_ADD;
-        outer_st_add->arg1 = st_shift;
-        outer_st_add->arg2 = st_outer_temp1;
-        outer_st_add->result = st_outer_temp2;
-
-        outer_st_assign->op = OP_ASSIGN;
-        outer_st_assign->arg1 = st_outer_temp2;
-        outer_st_assign->result = st_shift;
-
-        st_temp_reset->op = OP_ASSIGN;
-        st_temp_reset->arg1 = sy_one;
-        st_temp_reset->result = st_temp;
-
-        $$.code = qu_concatenate($$.code, outer_ar_mult);
-        $$.code = qu_concatenate($$.code, outer_ar_add);
-        $$.code = qu_concatenate($$.code, outer_ar_assign);
-        $$.code = qu_concatenate($$.code, ar_temp_reset);
-        $$.code = qu_concatenate($$.code, outer_st_mult);
-        $$.code = qu_concatenate($$.code, outer_st_add);
-        $$.code = qu_concatenate($$.code, outer_st_assign);
-        $$.code = qu_concatenate($$.code, st_temp_reset);
+        $$.code = qu_concatenate($$.code, ar_inner_mult);
+        $$.code = qu_concatenate($$.code, ar_inner_assign);
+        $$.code = qu_concatenate($$.code, st_inner_mult);
+        $$.code = qu_concatenate($$.code, st_inner_assign);
       }
 
-      get_ar_offset_mult->op = OP_MULTIPLY;
-      get_ar_offset_mult->arg1 = ar_shift;
-      get_ar_offset_mult->arg2 = sy_bytes;
-      get_ar_offset_mult->result = ar_of_temp;
+      Symbol * ar_outer_temp1 = NULL,
+        * ar_outer_temp2 = NULL,
+        * outer_temp3 = NULL,
+        * outer_temp4 = NULL,
+        * st_outer_temp1 = NULL,
+        * st_outer_temp2 = NULL;
+      Quad * outer_ar_mult = qu_generate(),
+        * outer_ar_add = qu_generate(),
+        * outer_ar_assign = qu_generate(),
+        * ar_temp_reset = qu_generate(),
+        * outer_st_mult = qu_generate(),
+        * outer_st_add = qu_generate(),
+        * outer_st_assign = qu_generate(),
+        * st_temp_reset = qu_generate(),
+        * outer_add_i = qu_generate(),
+        * outer_sub_i = qu_generate();
 
-      get_ar_offset_assign->op = OP_ASSIGN;
-      get_ar_offset_assign->arg1 = ar_of_temp;
-      get_ar_offset_assign->result = ar_offset;
+      table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
+      ar_outer_temp1 = table;
 
-      get_st_offset_mult->op = OP_MULTIPLY;
-      get_st_offset_mult->arg1 = st_shift;
-      get_st_offset_mult->arg2 = sy_bytes;
-      get_st_offset_mult->result = st_of_temp;
+      table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
+      ar_outer_temp2 = table;
 
-      get_st_offset_assign->op = OP_ASSIGN;
-      get_st_offset_assign->arg1 = st_of_temp;
-      get_st_offset_assign->result = st_offset;
+      table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
+      st_outer_temp1 = table;
 
-      // Operation on values
-      final_ar_assign->op = OP_ASSIGN_ARRAY_VALUE;
-      final_ar_assign->arg1 = array;
-      final_ar_assign->arg2 = ar_offset;
-      final_ar_assign->result = final_ar_temp;
+      table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
+      st_outer_temp2 = table;
 
-      final_st_assign->op = OP_ASSIGN_ARRAY_VALUE;
-      final_st_assign->arg1 = stencil;
-      final_st_assign->arg2 = st_offset;
-      final_st_assign->result = final_st_temp;
+      table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
+      outer_temp3 = table;
 
-      final_mult->op = OP_MULTIPLY;
-      final_mult->arg1 = final_ar_temp;
-      final_mult->arg2 = final_st_temp;
-      final_mult->result = final_temp1;
+      table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
+      outer_temp4 = table;
 
-      final_add->op = OP_ADD;
-      final_add->arg1 = result;
-      final_add->arg2 = final_temp1;
-      final_add->result = final_temp2;
+      outer_add_i->op = OP_ADD;
+      outer_add_i->arg1 = $4.sizes->values[i];
+      outer_add_i->arg2 = is->values[i];
+      outer_add_i->result = outer_temp3;
 
-      final_assign->op = OP_ASSIGN;
-      final_assign->arg1 = final_temp2;
-      final_assign->result = result;
+      outer_sub_i->op = OP_SUBTRACT;
+      outer_sub_i->arg1 = outer_temp3;
+      outer_sub_i->arg2 = sy_neighbors;
+      outer_sub_i->result = outer_temp4;
 
-      $$.code = qu_concatenate($$.code, get_ar_offset_mult);
-      $$.code = qu_concatenate($$.code, get_ar_offset_assign);
-      $$.code = qu_concatenate($$.code, get_st_offset_mult);
-      $$.code = qu_concatenate($$.code, get_st_offset_assign);
-      $$.code = qu_concatenate($$.code, final_ar_assign);
-      $$.code = qu_concatenate($$.code, final_st_assign);
-      $$.code = qu_concatenate($$.code, final_mult);
-      $$.code = qu_concatenate($$.code, final_add);
-      $$.code = qu_concatenate($$.code, final_assign);
+      outer_ar_mult->op = OP_MULTIPLY;
+      outer_ar_mult->arg1 = outer_temp4;
+      outer_ar_mult->arg2 = ar_temp;
+      outer_ar_mult->result = ar_outer_temp1;
 
-      c++;
-    } while(va_array_forward(it_array, lim_array, array->value->array.dimensions) && va_array_forward(it_stencil, stencil->value->array.sizes, stencil->value->array.dimensions));
+      outer_ar_add->op = OP_ADD;
+      outer_ar_add->arg1 = ar_shift;
+      outer_ar_add->arg2 = ar_outer_temp1;
+      outer_ar_add->result = ar_outer_temp2;
+
+      outer_ar_assign->op = OP_ASSIGN;
+      outer_ar_assign->arg1 = ar_outer_temp2;
+      outer_ar_assign->result = ar_shift;
+
+      ar_temp_reset->op = OP_ASSIGN;
+      ar_temp_reset->arg1 = sy_one;
+      ar_temp_reset->result = ar_temp;
+
+      outer_st_mult->op = OP_MULTIPLY;
+      outer_st_mult->arg1 = is->values[i];
+      outer_st_mult->arg2 = st_temp;
+      outer_st_mult->result = st_outer_temp1;
+
+      outer_st_add->op = OP_ADD;
+      outer_st_add->arg1 = st_shift;
+      outer_st_add->arg2 = st_outer_temp1;
+      outer_st_add->result = st_outer_temp2;
+
+      outer_st_assign->op = OP_ASSIGN;
+      outer_st_assign->arg1 = st_outer_temp2;
+      outer_st_assign->result = st_shift;
+
+      st_temp_reset->op = OP_ASSIGN;
+      st_temp_reset->arg1 = sy_one;
+      st_temp_reset->result = st_temp;
+
+      $$.code = qu_concatenate($$.code, outer_add_i);
+      $$.code = qu_concatenate($$.code, outer_sub_i);
+      $$.code = qu_concatenate($$.code, outer_ar_mult);
+      $$.code = qu_concatenate($$.code, outer_ar_add);
+      $$.code = qu_concatenate($$.code, outer_ar_assign);
+      $$.code = qu_concatenate($$.code, ar_temp_reset);
+      $$.code = qu_concatenate($$.code, outer_st_mult);
+      $$.code = qu_concatenate($$.code, outer_st_add);
+      $$.code = qu_concatenate($$.code, outer_st_assign);
+      $$.code = qu_concatenate($$.code, st_temp_reset);
+    }
+
+    get_ar_offset_mult->op = OP_MULTIPLY;
+    get_ar_offset_mult->arg1 = ar_shift;
+    get_ar_offset_mult->arg2 = sy_bytes;
+    get_ar_offset_mult->result = ar_of_temp;
+
+    get_ar_offset_assign->op = OP_ASSIGN;
+    get_ar_offset_assign->arg1 = ar_of_temp;
+    get_ar_offset_assign->result = ar_offset;
+
+    get_st_offset_mult->op = OP_MULTIPLY;
+    get_st_offset_mult->arg1 = st_shift;
+    get_st_offset_mult->arg2 = sy_bytes;
+    get_st_offset_mult->result = st_of_temp;
+
+    get_st_offset_assign->op = OP_ASSIGN;
+    get_st_offset_assign->arg1 = st_of_temp;
+    get_st_offset_assign->result = st_offset;
+
+    Symbol * ar_item = NULL,
+      * st_item = NULL,
+      * final_temp1 = NULL,
+      * final_temp2 = NULL;
+    Quad * get_ar_item = qu_generate(), * get_st_item = qu_generate(), * multiply = qu_generate(), * add = qu_generate(), * assign = qu_generate();
+
+    table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
+    ar_item = table;
+
+    table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
+    st_item = table;
+
+    table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
+    final_temp1 = table;
+
+    table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
+    final_temp2 = table;
+
+    get_ar_item->op = OP_ASSIGN_ARRAY_VALUE;
+    get_ar_item->arg1 = array;
+    get_ar_item->arg2 = ar_offset;
+    get_ar_item->result = ar_item;
+
+    get_st_item->op = OP_ASSIGN_ARRAY_VALUE;
+    get_st_item->arg1 = stencil;
+    get_st_item->arg2 = st_offset;
+    get_st_item->result = st_item;
+
+    multiply->op = OP_MULTIPLY;
+    multiply->arg1 = ar_item;
+    multiply->arg2 = st_item;
+    multiply->result = final_temp1;
+
+    add->op = OP_ADD;
+    add->arg1 = result;
+    add->arg2 = final_temp1;
+    add->result = final_temp2;
+
+    assign->op = OP_ASSIGN;
+    assign->arg1 = final_temp2;
+    assign->result = result;
+
+    $$.code = qu_concatenate($$.code, get_ar_offset_mult);
+    $$.code = qu_concatenate($$.code, get_ar_offset_assign);
+
+    $$.code = qu_concatenate($$.code, get_st_offset_mult);
+    $$.code = qu_concatenate($$.code, get_st_offset_assign);
+
+
+    $$.code = qu_concatenate($$.code, get_ar_item);
+    $$.code = qu_concatenate($$.code, get_st_item);
+    $$.code = qu_concatenate($$.code, multiply);
+    $$.code = qu_concatenate($$.code, add);
+    $$.code = qu_concatenate($$.code, assign);
+
+    for(i = (dimensions - 1); i >= 0; i--) {
+      Symbol * temp = NULL;
+      Quad * return_to_init_label = qu_generate(),
+        * goto_on_false = qu_generate(),
+        * incr_iterator = qu_generate(),
+        * assign_iterator = qu_generate();
+
+      table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
+      temp = table;
+
+      printf("is size -- %lu\n", is->next);
+
+      incr_iterator->op = OP_ADD;
+      incr_iterator->arg1 = is->values[i];
+      incr_iterator->arg2 = sy_one;
+      incr_iterator->result = temp;
+
+      assign_iterator->op = OP_ASSIGN;
+      assign_iterator->arg1 = temp;
+      assign_iterator->result = is->values[i];
+
+      return_to_init_label->op = OP_GOTO;
+      return_to_init_label->result = sc_labels->values[i];
+
+      goto_on_false->op = OP_LABEL;
+      goto_on_false->result = f_labels->values[i];
+
+      $$.code = qu_concatenate($$.code, incr_iterator);
+      $$.code = qu_concatenate($$.code, assign_iterator);
+      $$.code = qu_concatenate($$.code, return_to_init_label);
+      $$.code = qu_concatenate($$.code, goto_on_false);
+    }
 
     $$.pointer = result;
   } /* ID correspond à un stencil ! */
-//  | ID rtab '$' ID {}
+  | ID rtab '$' ID {
+
+  }
   ;
 
 rtab:
