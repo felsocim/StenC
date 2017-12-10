@@ -34,9 +34,28 @@ intList * intListConcat(intList* l1, intList* l2){
   return l1;
 }
 
+int intListGet(intList * list, size_t index) {
+  if(list->size < 1)
+    failwith("Failed to get integer list value at given index! The target list is empty");
+
+  if(index >= list->size)
+    failwith("Failed to get integer list value at given index! The required index is out of given list's bounds");
+
+  size_t c = 0;
+
+  elemList * tmp = list->listFirst;
+
+  while(tmp != NULL && c != index){
+    c++;
+    tmp = tmp->next;
+  }
+
+  return tmp->number;
+}
+
 void print_intList(intList* il){
   printf("liste : ");
-elemList* tmp = il->listFirst;
+  elemList* tmp = il->listFirst;
   while(tmp != NULL){
     printf("%d,",tmp->number);
     tmp = tmp->next;

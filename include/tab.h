@@ -16,6 +16,7 @@ typedef struct{
 intList * intListCreate();
 intList * intListPushBack(intList* il,int n);
 intList * intListConcat(intList* l1, intList* l2);
+int intListGet(intList * list, size_t index);
 void print_intList(intList* l1);
 
 #endif
