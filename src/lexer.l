@@ -31,7 +31,7 @@ string	\"[\'0-9a-zA-Z ]*\"
 main { return MAIN; }
 
 stencil {return STENCIL;}
-
+for {return FOR;}
 {string} { yylval.name = strdup(yytext); return STRING; }
 return[ \t]0 { return END; }
 
