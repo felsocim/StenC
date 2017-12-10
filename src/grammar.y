@@ -461,7 +461,201 @@ assignment:
     ql_free($3.falselist);
   }
   | ID rtab '=' listInit {
-    printf("tableau initialisee\n");
+    if(!$2.instantiable) {
+      fprintf(stderr, "Syntax error: Static array cannot be declared using with a variable!\n");
+      exit(EXIT_FAILURE);
+    }
+
+    Value * v = va_alloc();
+    size_t i = 0, size = 0;
+
+    v->array.dimensions = $2.dimensions;
+    v->array.sizes = (size_t *) malloc(v->array.dimensions * sizeof(size_t));
+
+    if(v->array.sizes == NULL)
+      failwith("Failed to reserve memory for array value sizes");
+
+    for(i = 0; i < v->array.dimensions; i++) {
+      v->array.sizes[i] = $2.sizes->values[i]->value->integer;
+      size *= v->array.sizes[i];
+    }
+
+    v->array.values = (int *) malloc(size * sizeof(int));
+
+    if(v->array.values == NULL)
+      failwith("Failed to reserve memory for array values");
+
+    size_t j = 0, c = 0;
+    size_t * iterator = (size_t *) calloc($2.dimensions, sizeof(size_t)),
+      * sizes = sltost($2.sizes);
+
+    if(iterator == NULL)
+      failwith("Failed to reserve memory for array iterator");
+
+    Value * v0 = va_alloc(),
+      * v1 = va_alloc(),
+      * bytes = va_alloc();
+    Symbol * symbol = NULL,
+      * sy_zero = NULL,
+      * sy_one = NULL,
+      * sy_bytes = NULL;
+
+    if((symbol = sy_lookup(table, $1)) == NULL) {
+      table = sy_add_variable(table, $1, false, TYPE_ARRAY, v);
+      $$.pointer = table;
+    } else {
+      $$.pointer = symbol;
+    }
+
+    v0->integer = 0;
+    v1->integer = 1;
+    bytes->integer = (int) sizeof(int);
+
+    table = sy_add_temporary(table, true, TYPE_INTEGER, v0);
+    sy_zero = table;
+
+    table = sy_add_temporary(table, true, TYPE_INTEGER, v1);
+    sy_one = table;
+
+    table = sy_add_temporary(table, true, TYPE_INTEGER, bytes);
+    sy_bytes = table;
+
+    $$.code = NULL;
+
+    do {
+      Value * iv = va_alloc();
+      Symbol * init_value = NULL,
+        * shift = NULL,
+        * temp = NULL,
+        * of_temp = NULL,
+        * offset = NULL;
+      Quad * init_shift = qu_generate(),
+        * init_temp = qu_generate(),
+        * get_offset_mult = qu_generate(),
+        * get_offset_assign = qu_generate(),
+        * get_item = qu_generate();
+
+      table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
+      shift = table;
+
+      table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
+      temp = table;
+
+      table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
+      of_temp = table;
+
+      table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
+      offset = table;
+
+      init_shift->op = OP_ASSIGN;
+      init_shift->arg1 = sy_zero;
+      init_shift->result = shift;
+
+      init_temp->op = OP_ASSIGN;
+      init_temp->arg1 = sy_one;
+      init_temp->result = temp;
+
+      $$.code = qu_concatenate($$.code, init_shift);
+      $$.code = qu_concatenate($$.code, init_temp);
+
+      for(i = 0; i < $2.dimensions; i++) {
+        for(j = i + 1; j < $2.dimensions; j++) {
+          Value * current = va_alloc();
+          Symbol * inner_temp = NULL,
+            * current_size = NULL;
+          Quad * inner_mult = qu_generate(),
+            * inner_assign = qu_generate();
+
+          table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
+          inner_temp = table;
+
+          current->integer = (int) sizes[j];
+
+          table = sy_add_temporary(table, true, TYPE_INTEGER, current);
+          current_size = table;
+
+          inner_mult->op = OP_MULTIPLY;
+          inner_mult->arg1 = temp;
+          inner_mult->arg2 = current_size;
+          inner_mult->result = inner_temp;
+
+          inner_assign->op = OP_ASSIGN;
+          inner_assign->arg1 = inner_temp;
+          inner_assign->result = temp;
+
+          $$.code = qu_concatenate($$.code, inner_mult);
+          $$.code = qu_concatenate($$.code, inner_assign);
+        }
+
+        Value * iterator_value = va_alloc();
+        Symbol * outer_temp1 = NULL,
+          * outer_temp2 = NULL,
+          * outer_temp3 = NULL;
+        Quad * outer_mult = qu_generate(),
+          * outer_add = qu_generate(),
+          * outer_assign = qu_generate(),
+          * temp_reset = qu_generate();
+
+        table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
+        outer_temp1 = table;
+
+        table = sy_add_temporary(table, false, TYPE_INTEGER, NULL);
+        outer_temp2 = table;
+
+        iterator_value->integer = (int) iterator[i];
+
+        table = sy_add_temporary(table, true, TYPE_INTEGER, iterator_value);
+        outer_temp3 = table;
+
+        outer_mult->op = OP_MULTIPLY;
+        outer_mult->arg1 = outer_temp3;
+        outer_mult->arg2 = temp;
+        outer_mult->result = outer_temp1;
+
+        outer_add->op = OP_ADD;
+        outer_add->arg1 = shift;
+        outer_add->arg2 = outer_temp1;
+        outer_add->result = outer_temp2;
+
+        outer_assign->op = OP_ASSIGN;
+        outer_assign->arg1 = outer_temp2;
+        outer_assign->result = shift;
+
+        temp_reset->op = OP_ASSIGN;
+        temp_reset->arg1 = sy_one;
+        temp_reset->result = temp;
+
+        $$.code = qu_concatenate($$.code, outer_mult);
+        $$.code = qu_concatenate($$.code, outer_add);
+        $$.code = qu_concatenate($$.code, outer_assign);
+        $$.code = qu_concatenate($$.code, temp_reset);
+      }
+
+      get_offset_mult->op = OP_MULTIPLY;
+      get_offset_mult->arg1 = shift;
+      get_offset_mult->arg2 = sy_bytes;
+      get_offset_mult->result = of_temp;
+
+      get_offset_assign->op = OP_ASSIGN;
+      get_offset_assign->arg1 = of_temp;
+      get_offset_assign->result = offset;
+
+      iv->integer = (int) intListGet($4, c);
+
+      table = sy_add_temporary(table, true, TYPE_INTEGER, iv);
+      init_value = table;
+
+      get_item->op = OP_ASSIGN;
+      get_item->arg1 = init_value;
+      get_item->arg2 = offset;
+      get_item->result = $$.pointer;
+
+      $$.code = qu_concatenate($$.code, get_offset_mult);
+      $$.code = qu_concatenate($$.code, get_offset_assign);
+      $$.code = qu_concatenate($$.code, get_item);
+
+      c++;
+    } while(va_array_forward(iterator, sizes, $2.dimensions)); // Add test on c
   }
   | ID rtab '=' expression {
     size_t i = 0, j = 0;
@@ -608,8 +802,6 @@ assignment:
     $$.code = qu_concatenate($$.code, get_offset_mult);
     $$.code = qu_concatenate($$.code, get_offset_assign);
     $$.code = qu_concatenate($$.code, get_item);
-
-    printf("PTYPE - %s\n", ttos($$.pointer->type));
   }
   ;
 
