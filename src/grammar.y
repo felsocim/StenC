@@ -2,7 +2,7 @@
   #include "../include/main.h"
 
   int yylex();
-  void yyerror(char*);
+  void yyerror(const char*);
 %}
 
 %union{
@@ -194,7 +194,7 @@ Quad * condition = qu_generate(), * ontrue = qu_generate(), * verify = qu_genera
 
     ql_free($5.truelist);
     ql_free($5.falselist);
-} 
+}
 ;
 
 exprBool:

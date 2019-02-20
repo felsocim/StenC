@@ -33,7 +33,7 @@ Symbol * sy_add_variable(Symbol * table, const char * identifier, bool constant,
 
 Symbol * sy_add_temporary(Symbol * table, bool constant, Type type, Value * value) {
   static int number = 0;
-  size_t temp_length = strlen(SYMBOL_TEMPORARY) + dlen(number);
+  size_t temp_length = strlen(SYMBOL_TEMPORARY) + intlen(number);
   char * name = (char *) malloc((temp_length + 1) * sizeof(char));
 
   if(name == NULL)

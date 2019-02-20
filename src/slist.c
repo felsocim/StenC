@@ -74,12 +74,15 @@ SList * sl_concatenate(SList * list1, SList * list2) {
   if(list1 == NULL || list2 == NULL)
     failwith("Failed to concatenate two symbol lists! One or both are not initialized");
 
-  if(list1->next == 0)
+  if(list1->next == 0) {
     return list2;
-  if(list2->next == 0)
-    return list1;
+  }
 
-    size_t i = 0;
+  if(list2->next == 0) {
+    return list1;
+  }
+
+  size_t i = 0;
 
   for(i = 0; i < list2->next; i++) {
     list1 = sl_insert(list1, list2->values[i]);

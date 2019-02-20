@@ -19,7 +19,7 @@ void usage(const char * arg_0, int exit_code) {
     exit(exit_code);
 }
 
-int dlen(int number) {
+int intlen(int number) {
 	int i = 0, c = 1;
 
 	for(i = 10; i < INT_MAX; i *= 10) {
