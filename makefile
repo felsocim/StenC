@@ -5,10 +5,10 @@ CFLAGS = -g -Wall
 LDFLAGS = -lfl -ly -lm
 
 all: compiler include/main.h
-	$(CC) $(CFLAGS) obj/*.o src/main.c -o bin/cc $(LDFLAGS)
+	$(CC) $(CFLAGS) obj/*.o src/main.c -o stenc $(LDFLAGS)
 
-tests: tos src/test/table.c
-	$(CC) $(CFLAGS) obj/common.o obj/tos.o src/test/table.c -o bin/test/table.out
+tests: test tos src/test/table.c
+	$(CC) $(CFLAGS) obj/common.o obj/tos.o src/test/table.c -o test/table.out
 
 compiler: tos slist tab  quad qlist analyzer include/main.h src/compiler.c
 	$(CC) $(CFLAGS) -c src/compiler.c -o obj/compiler.o
@@ -40,13 +40,14 @@ value: tab common include/value.h src/value.c
 tab: common include/tab.h src/tab.c
 	$(CC) $(CFLAGS) -c src/tab.c -o obj/tab.o
 
-common: dirs include/common.h src/common.c
+common: obj include/common.h src/common.c
 	$(CC) $(CFLAGS) -c src/common.c -o obj/common.o
 
-dirs:
+obj:
 	test -d obj || mkdir obj
-	test -d bin || mkdir bin
-	test -d bin/test || mkdir bin/test
+
+test:
+	test -d test || mkdir test
 
 clean:
-	rm -fr obj bin src/lexer.c include/compiler.h src/compiler.c *.s
+	rm -fr obj test src/lexer.c include/compiler.h src/compiler.c stenc *.s
