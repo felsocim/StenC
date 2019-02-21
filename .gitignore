@@ -5,7 +5,7 @@ doc/*
 obj/*
 
 # Binaries
-bin/*
+stenc
 
 # Analyzers
 include/compiler.h
