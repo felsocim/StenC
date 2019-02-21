@@ -163,7 +163,7 @@ structControl:
   }
   | FOR '(' assignment ';' exprBool ';' assignment ')' '{' list '}' {
 
-Quad * condition = qu_generate(), * ontrue = qu_generate(), * verify = qu_generate(), * onfalse = qu_generate();
+    Quad * condition = qu_generate(), * ontrue = qu_generate(), * verify = qu_generate(), * onfalse = qu_generate();
 
     table = sy_add_label(table, NULL);
     condition->op = OP_LABEL;
@@ -185,7 +185,8 @@ Quad * condition = qu_generate(), * ontrue = qu_generate(), * verify = qu_genera
     $5.truelist = ql_complete($5.truelist, ontrue->result);
     $5.falselist = ql_complete($5.falselist, onfalse->result);
     $$.code = qu_concatenate($$.code, $3.code);
-    $$.code = qu_concatenate(condition, $5.code);
+    $$.code = qu_concatenate($$.code, condition);    
+    $$.code = qu_concatenate($$.code, $5.code);    
     $$.code = qu_concatenate($$.code, ontrue);
     $$.code = qu_concatenate($$.code, $10.code);
     $$.code = qu_concatenate($$.code, $7.code);
