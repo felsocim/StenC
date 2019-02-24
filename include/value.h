@@ -1,53 +1,37 @@
-/*
- * StenC - Basic C language compiler with support for stencils
- *
- * Copyright (C) 2017  Marek Felsoci, Arnaud Pinsun
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
- */
-#ifndef __VALUE_H
-#define __VALUE_H
+#ifndef VALUE_H
+#define VALUE_H
 
-#include "common.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <stdarg.h>
+#include <errno.h>
 
-// Supported symbol types
+// Possible symbol value types
 typedef enum {
-  TYPE_INTEGER,
-  TYPE_ARRAY,
-  TYPE_LABEL,
-  TYPE_STRING
-} Type;
+  VALUE_INTEGER,
+  VALUE_STRING,
+  VALUE_ARRAY,
+  VALUE_FUNCTION,
+  VALUE_LABEL
+} ValueType;
 
-// Supported symbol values definitions
-typedef union {
-  int integer;
-  char * string;
-  struct {
-    int * values;
-    size_t * sizes;
-    size_t dimensions;
-  } array;
+// Union of supported symbol value data structures
+typedef struct {
+  union {
+    int integer;
+    char * string;
+    struct {
+      int * values;
+      size_t * sizes;
+      size_t dimensions;
+    } array;
+  };
+  ValueType type;
 } Value;
 
-char * ttos(Type);
-
 Value * va_alloc();
-void va_print(Value *, Type);
-void va_free(Value *, Type);
+void va_print(const Value *);
+void va_free(Value *);
 
-int * va_array_get(Value *, size_t *);
-bool va_array_forward(size_t *, const size_t *, size_t);
-
-#endif // __VALUE_H
+#endif // VALUE_H

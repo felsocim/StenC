@@ -1,118 +1,72 @@
 #include "../include/value.h"
 #include <string.h>
 
-char * ttos(Type type) {
-  switch(type) {
-    case TYPE_INTEGER:
-      return "integer";
-    case TYPE_ARRAY:
-      return "array";
-    case TYPE_LABEL:
-      return "label";
-    case TYPE_STRING:
-      return "string";
-  }
-
-  return NULL;
-}
-
 Value * va_alloc() {
   Value * value = (Value *) malloc(sizeof(Value));
 
-  if(value == NULL)
-    failwith("Failed to reserve memory for new value");
+  if(!value) {
+    errno = ENOMEM;
+    return NULL;
+  }
 
   return value;
 }
 
-void va_print(Value * value, Type type) {
-  if(value == NULL)
-    failwith("Failed to print value content! Pointer to the given value cannot be NULL");
-
-  switch(type) {
-    case TYPE_INTEGER:
+void va_print(const Value * value) {
+  switch(value->type) {
+    case VALUE_INTEGER:
       printf("%d", value->integer);
       break;
-    case TYPE_ARRAY:
-      printf("|");
-
-      size_t * current = (size_t *) calloc(value->array.dimensions, sizeof(size_t));
-
-      do {
-        printf(" %d |", *va_array_get(value, current));
-      } while (va_array_forward(current, value->array.sizes, value->array.dimensions));
-
-      free(current);
-      break;
-    case TYPE_STRING:
+    case VALUE_STRING:
       printf("%s", value->string);
       break;
-    default:
-      failwith("Failed to determine symbol type");
-  }
-}
+    case VALUE_ARRAY:
+      size_t value_count = 1, chunk_size = value->array.sizes[value->array.dimensions - 1];
+      for(size_t i = 0; i < value->array.dimensions; i++) {
+        value_count *= value->array.sizes[i];
+        if(i < value->array.dimensions - 1) {
+          printf("{");
+        }
+      }
 
-void va_free(Value * value, Type type) {
-  if(value != NULL) {
-    if(type == TYPE_ARRAY) {
-      if(value->array.values != NULL)
-        free(value->array.values);
-
-      if(value->array.sizes != NULL)
-        free(value->array.sizes);
-    }
-    if(type == TYPE_STRING && value->string != NULL)
-      free(value->string);
-
-    free(value);
-  }
-}
-
-
-int * va_array_get(Value * value, size_t * address) {
-  if(address == NULL)
-    failwith("Failed to determine array value address! Provided coordinates cannot be NULL");
-
-  size_t shift = 0, temp = 1;
-  size_t i = 0, j = 0;
-
-#ifdef _DEBUG
-  printf("getting [%lu][%lu]\n", address[0], address[1]);
-#endif
-
-  for(i = 0; i < value->array.dimensions; i++) {
-    for(j = i + 1; j < value->array.dimensions; j++) {
-      temp *= value->array.sizes[j];
-    }
-    shift += address[i] * temp;
-    temp = 1;
-  }
-
-  return (value->array.values + shift);
-}
-
-bool va_array_forward(size_t * iterator, const size_t * sizes, size_t dimensions) {
-  int i = 0, final = 0;
-  bool increment = false;
-
-  for(i = (dimensions - 1); i >= 0; i--) {
-    if(iterator[i] < (sizes[i] - 1)) {
-      iterator[i]++;
-      increment = true;
-      final = i;
+      for(size_t i = 0; i < value_count; i += chunk_size) {
+        printf("{ ");
+        for(size_t j = 0; j < chunk_size; j++) {
+          printf("%d%s", value->array.values + i + j, (j < chunk_size - 1 ? ", " : ""));
+        }
+        printf("}%s", (i < value_count - 1 ? ", " : ""));
+      }
+      
+      for(size_t i = 0; i < value->array.dimensions - 1; i++) {
+        printf("}");
+      }
       break;
-    }
-    increment = false;
+    case VALUE_FUNCTION:
+    case VALUE_LABEL:
+    default:
+      return;
+  }
+}
+
+void va_free(Value * value) {
+  if(!value) { // Value has already been freed or has never been allocated.
+    return;
   }
 
-  if(increment) {
-    if(final < (dimensions - 1)) {
-      for(i = (dimensions - 1); i > final; i--)
-        iterator[i] = 0;
-    }
-
-    return true;
+  switch(value->type) {
+    case VALUE_STRING:
+      free(value->string);
+      break;
+    case VALUE_ARRAY:
+      free(value->array.values);
+      free(value->array.sizes);
+      break;
+    case VALUE_INTEGER:
+    case VALUE_LABEL:
+    case VALUE_FUNCTION:
+    default:
+      break;
   }
 
-  return false;
+  free(value);
 }
