@@ -81,14 +81,16 @@ typedef struct {
 // Represents a function declaration
 typedef struct {
   Symbol * function;
+  ASTNode * returns;
+  ASTNode ** args;
+  size_t argc;
   ASTNode * body;
 } ASTFunctionDeclaration;
 
 // Represents a function call, of either user-defined or a built-in function ('printi' or 'printf')
 typedef struct {
-  Symbol * function;
-  ASTNode * argv;
-  size_t argc;
+  ASTFunctionDeclaration * function;
+  ASTNode ** argv;
 } ASTFunctionCall;
 
 // Represents a scope (e. g. scope of a function or even of an entire source file)
@@ -116,8 +118,10 @@ typedef struct s_node {
 };
 
 const char * operator_to_string(Operator);
-ASTNode * ast_new_node(ASTType);
-void ast_delete_node(ASTNode *);
+ASTNode * ast_node_alloc(ASTType);
+void ast_node_free(ASTNode *);
 void ast_dump(const ASTNode *);
+
+ASTFunctionDeclaration * ast_find_function_declaration(const ASTNode *, const Symbol *);
 
 #endif // AST_H

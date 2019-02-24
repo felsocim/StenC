@@ -40,7 +40,7 @@ const char * operator_to_string(Operator operator) {
   }
 }
 
-ASTNode * ast_new_node(ASTType type) {
+ASTNode * ast_node_alloc(ASTType type) {
   ASTNode * node = (ASTNode *) malloc(sizeof(ASTNode));
 
   if(!node) {
@@ -103,7 +103,7 @@ memerr:
   return NULL;
 }
 
-void ast_delete_node(ASTNode * node) {
+void ast_node_free(ASTNode * node) {
   if(!node) { // Node has already been freed or has never been allocated
     return;
   }
@@ -146,10 +146,13 @@ void ast_delete_node(ASTNode * node) {
       break;
     case NODE_FUNCTION_DECLARATION:
       ast_delete_node(node->function_declaration->body);
+      free(node->function_declaration->args);
       free(node->function_declaration);
       break;
     case NODE_FUNCTION_CALL:
-      ast_delete_node(node->function_call->argv);
+      for(size_t i = 0; i < node->function_call->function->argc; i++) {
+        ast_delete_node(node->function_call->argv[i]);
+      }      
       free(node->function_call);
       break;
     case NODE_SCOPE:
@@ -169,13 +172,41 @@ void ast_dump_and_indent(const ASTNode * node, size_t indent, const char * begin
     return;
   }
 
+  if(indent > 0) {
+    printf("│");
+  }
+
   for(size_t i = 0; i < indent; i++) {
     printf("  "); // We indent using 2 spaces.
   }
 
   switch(node->type) {
     case NODE_IDENTIFIER:
-      // TODO
+      switch(node->identifier->type) {
+        case VALUE_INTEGER:
+          if(node->identifier->is_constant) {
+            printf("%s integer constant <name: %s, value: %d>\n", beginning, node->identifier->identifier, node->identifier->value->integer);
+          } else {
+            printf("%s integer variable <name: %s>\n", beginning, node->identifier->identifier);
+          }
+          break;
+        case VALUE_STRING:
+          printf("%s string literal <name: %s, value: %s>\n", beginning, node->identifier->identifier, node->identifier->value->string);
+          break;
+        case VALUE_ARRAY:
+          if(node->identifier->is_constant) {
+            printf("%s integer array constant <name: %s, values: ", beginning, node->identifier->identifier);
+            va_print(node->identifier);
+            printf(">\n");
+          } else {
+            printf("%s integer array variable <name: %s>\n", beginning, node->identifier->identifier);
+          }
+          break;
+        case VALUE_FUNCTION:
+        case VALUE_LABEL:
+        default:
+          break;
+      }
       break;
     case NODE_ARRAY_ACCESS:
       printf("%s Array access <%s>\n", beginning, node->access->array->identifier);
@@ -183,51 +214,81 @@ void ast_dump_and_indent(const ASTNode * node, size_t indent, const char * begin
       size_t limit = node->access->array->value->array.dimensions;
       if(node->access->array) {
         for(size_t i = 0; i < limit; i++) {
-          ast_dump_and_indent(node->access->accessors[i], ++indent, (i < limit - 1 ? "├─ " : "└─ "));
+          ast_dump_and_indent(node->access->accessors[i], ++indent, (i < limit - 1 ? "├─" : "└─"));
         }
       }
       break;
     case NODE_UNARY:
       printf("%s Unary operator <%s>\n", beginning, operator_to_string(node->unary->operation));
-      ast_dump_and_indent(node->unary->expression, ++indent, "└─ ");
+      ast_dump_and_indent(node->unary->expression, ++indent, "└─");
       break;
     case NODE_BINARY:
       printf("%s Binary operator <%s>\n", beginning, operator_to_string(node->binary->operation));
-      ast_dump_and_indent(node->binary->LHS, ++indent, "├─ ");
-      ast_dump_and_indent(node->binary->RHS, ++indent, "└─ ");
+      ast_dump_and_indent(node->binary->LHS, ++indent, "├─");
+      ast_dump_and_indent(node->binary->RHS, ++indent, "└─");
       break;
     case NODE_IF:
       printf("%s IF conditional\n", beginning);
-      ast_dump_and_indent(node->if_conditional->condition, ++indent, "├─ ");
+      ast_dump_and_indent(node->if_conditional->condition, ++indent, "├─");
       if(node->if_conditional->onelse) {
-        ast_dump_and_indent(node->if_conditional->onif, ++indent, "├─ ");
-        ast_dump_and_indent(node->if_conditional->onelse, ++indent, "└─ ");
+        ast_dump_and_indent(node->if_conditional->onif, ++indent, "├─");
+        ast_dump_and_indent(node->if_conditional->onelse, ++indent, "└─");
       } else {
-        ast_dump_and_indent(node->if_conditional->onif, ++indent, "└─ ");
+        ast_dump_and_indent(node->if_conditional->onif, ++indent, "└─");
       }
       break;
     case NODE_WHILE:
       printf("%s WHILE loop\n", beginning);
-      ast_dump_and_indent(node->while_loop->condition, ++indent, "├─ ");
-      ast_dump_and_indent(node->while_loop->statements, ++indent, "└─ ");
+      ast_dump_and_indent(node->while_loop->condition, ++indent, "├─");
+      ast_dump_and_indent(node->while_loop->statements, ++indent, "└─");
       break;
     case NODE_FOR:
       printf("%s FOR loop\n", beginning);
-      ast_dump_and_indent(node->for_loop->initialization, ++indent, "├─ ");
-      ast_dump_and_indent(node->for_loop->condition, ++indent, "├─ ");
-      ast_dump_and_indent(node->for_loop->incrementation, ++indent, "├─ ");
-      ast_dump_and_indent(node->for_loop->statements, ++indent, "└─ ");
+      ast_dump_and_indent(node->for_loop->initialization, ++indent, "├─");
+      ast_dump_and_indent(node->for_loop->condition, ++indent, "├─");
+      ast_dump_and_indent(node->for_loop->incrementation, ++indent, "├─");
+      ast_dump_and_indent(node->for_loop->statements, ++indent, "└─");
       break;
     case NODE_FUNCTION_DECLARATION:
-      // TODO
+      printf("%s Function declaration <%s>", beginning, node->function_declaration->function->identifier);
+
+      if(!node->function_declaration->returns) {
+        printf(" [without return value]");
+      } 
+      
+      if(!node->function_declaration->argc) {
+        printf(" [without argument(s)]");
+      }
+
+      printf("\n");
+
+      if(node->function_declaration->argc) {
+        size_t i = 0;
+        for(; i < node->function_declaration->argc - 1; i++) {
+          ast_dump_and_indent(node->function_declaration->args[i], ++indent, "├─ Argument:");
+        }
+        ast_dump_and_indent(node->function_declaration->args[i], ++indent, node->function_declaration->returns ? "├─ Argument:" : "└─ Argument:");
+      }
+
+      if(node->function_declaration->returns) {
+        ast_dump_and_indent(node->function_declaration->returns, ++indent, "└─ Returns:");
+      }
       break;
     case NODE_FUNCTION_CALL:
-      // TODO
+      printf("%s Function call <%s>", beginning, node->function_call->function->function->identifier);
+
+      if(node->function_call->function->argc) {
+        size_t i = 0;
+        for(; i < node->function_call->function->argc - 1; i++) {
+          ast_dump_and_indent(node->function_call->argv[i], ++indent, "├─ Argument value:");
+        }
+        ast_dump_and_indent(node->function_call->argv[i], ++indent, "└─ Argument value:");
+      }
       break;
     case NODE_SCOPE:
       printf("%s Scop <%s>\n", beginning, node->scope->name->identifier);
       for(size_t i = 0; i < node->scope->count; i++) {
-        ast_dump_and_indent(node->scope->statements[i], ++indent, (i < node->scope->count - 1 ? "├─ " : "└─ "));
+        ast_dump_and_indent(node->scope->statements[i], ++indent, (i < node->scope->count - 1 ? "├─" : "└─"));
       }
       break;
     default: // Unknown AST node type detected
@@ -237,4 +298,25 @@ void ast_dump_and_indent(const ASTNode * node, size_t indent, const char * begin
 
 void ast_dump(const ASTNode * node) {
   ast_dump_and_indent(node, 0, "──");
+}
+
+ASTFunctionDeclaration * ast_find_function_declaration(const ASTNode * tree, const Symbol * function) {
+  if(!tree) {
+    return NULL;
+  }
+
+  if(tree->type == NODE_FUNCTION_DECLARATION && sy_compare(tree->function_declaration->function, function)) {
+    return tree;
+  }
+
+  if(tree->type == NODE_SCOPE) {
+    ASTFunctionDeclaration * result = NULL;
+    for(size_t i = 0; i < tree->scope->count; i++) {
+      if((result = ast_find_function_declaration(tree->scope->statements[i], function))) {
+        return result;
+      }
+    }
+  }
+
+  return NULL;
 }
