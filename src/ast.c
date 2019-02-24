@@ -95,10 +95,8 @@ ASTNode * ast_new_node(ASTType type) {
       break;
     case NODE_IDENTIFIER: // Identifiers are allocated in the table of symbols using associated functions.
     default: // Unknown AST node type detected
-      return NULL;
+      return node;
   }
-
-  return node;
 
 memerr:
   errno = ENOMEM;
