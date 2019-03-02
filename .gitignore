@@ -1,8 +1,8 @@
 # Documentation
-doc/*
+doc
 
 # Object files
-obj/*
+obj
 
 # Binaries
 stenc
@@ -12,8 +12,8 @@ include/compiler.h
 src/compiler.c
 src/lexer.c
 
-# Test files
-test/*
-
 # Output files
 *.s
+
+# IDE
+.vscode
