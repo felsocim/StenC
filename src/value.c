@@ -5,7 +5,6 @@ Value * va_alloc() {
   Value * value = (Value *) malloc(sizeof(Value));
 
   if(!value) {
-    errno = ENOMEM;
     return NULL;
   }
 
