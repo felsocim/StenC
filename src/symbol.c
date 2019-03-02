@@ -1,125 +1,135 @@
-#include "../include/tos.h"
+#include "symbol.h"
 
 Symbol * sy_alloc(void) {
-  Symbol * table = (Symbol *) malloc(sizeof(struct s_table_of_symbols));
+  Symbol * table = (Symbol *) malloc(sizeof(Symbol));
 
-  if(table == NULL)
-    failwith("Failed to reserve memory for a new entry of table of symbols");
+  if(!table){
+    return NULL;
+  }
 
   table->identifier = NULL;
-  table->constant = false;
-  table->type = TYPE_INTEGER;
+  table->scope = NULL;
+  table->is_constant = false;
   table->value = NULL;
-  table->next = NULL;
 
   return table;
 }
 
-Symbol * sy_add_variable(Symbol * table, const char * identifier, bool constant, Type type, Value * value) {
+Symbol * sy_variable(const char * identifier, bool is_constant, Value * value) {
   Symbol * symbol = sy_alloc();
+  if(!symbol) {
+    return NULL;
+  }
 
   symbol->identifier = strdup(identifier);
+  if(!symbol->identifier) {
+    sy_free(symbol);
+    return NULL;
+  }
 
-  if(symbol->identifier == NULL)
-    failwith("Failed to copy the identifier for a new entry of given table of symbols");
-
-  symbol->constant = constant;
-  symbol->type = type;
+  symbol->is_constant = is_constant;
   symbol->value = value;
-  symbol->next = table;
 
   return symbol;
 }
 
-Symbol * sy_add_temporary(Symbol * table, bool constant, Type type, Value * value) {
+Symbol * sy_temporary(bool is_constant, Value * value) {
   static int number = 0;
-  size_t temp_length = strlen(SYMBOL_TEMPORARY) + intlen(number);
-  char * name = (char *) malloc((temp_length + 1) * sizeof(char));
 
-  if(name == NULL)
-    failwith("Failed to reserve memory for the identifier of a new temporary variable entry of given table of symbols");
+  size_t length = strlen(SY_TEMPORARY_PREFIX) + intlen(number);
+  if(length > INT_MAX) {
+    goto error;
+  }
 
-  sprintf(name, "%s%d", SYMBOL_TEMPORARY, number);
+  char * name = (char *) malloc(length + 1);
+  if(!name) {
+    goto error;
+  }
 
-  table = sy_add_variable(table, name, constant, type, value);
+  if(snprintf(name, "%s%d", length, SY_TEMPORARY_PREFIX, number) != (int) length) {
+    goto clean;
+  }
+
+  Symbol * temporary = sy_add_variable(name, is_constant, value);
+  if(!temporary) {
+    goto clean;
+  }
+
   free(name);
-
   number++;
 
-  return table;
-}
+  return temporary;
 
-Symbol * sy_add_label(Symbol * table, const char * name) {
-  if(name != NULL) {
-    table = sy_add_variable(table, name, true, TYPE_LABEL, NULL);
-  } else {
-    table = sy_add_temporary(table, true, TYPE_LABEL, NULL);
-  }
-
-  return table;
-}
-
-Symbol * sy_add_string(Symbol * table, Value * value) {
-  table = sy_add_temporary(table, true, TYPE_STRING, value);
-  return table;
-}
-
-Symbol * sy_lookup(Symbol * table, const char * identifier) {
-  if(table == NULL)
-    return NULL;
-
-  if(identifier == NULL)
-    failwith("Failed to seek for requested entry in given table of symbols! Provided identifier cannot be NULL");
-
-  Symbol * temp = table;
-
-  while(temp != NULL) {
-    if(strcmp(temp->identifier, identifier) == 0)
-      return temp;
-
-    temp = temp->next;
-  }
-
+clean:
+  free(name);
+error:
   return NULL;
 }
 
-void sy_print(Symbol * symbol) {
-  if(symbol == NULL) {
-    printf("Empty symbol set\n");
+Symbol * sy_label(const char * name) {
+  Value * va_label = va_alloc();
+  if(!va_label) {
+    return NULL;
+  }
+
+  va_label->type = VALUE_LABEL;
+
+  Symbol * label;
+  if(name) {
+    label = sy_variable(name, true, va_label);
+  } else {
+    label = sy_temporary(true, va_label);
+  }
+
+  return label;
+}
+
+bool sy_compare(const Symbol * __s1, const Symbol * __s2) {
+  return !strcmp(__s1->identifier, __s2->identifier) && !strcmp(__s1->scope, __s2->scope);
+}
+
+void sy_print(const Symbol * symbol) {
+  if(!symbol) {
     return;
   }
 
-  Symbol * temp = symbol;
+  printf("%s\t", symbol->identifier);
 
-  while(temp != NULL) {
-    printf("%s\t%s\t%s\t", temp->identifier, (temp->constant ? "constant" : "variable"), ttos(temp->type));
-
-    if(temp->constant && temp->type != TYPE_LABEL)
-      va_print(temp->value, temp->type);
-    else
-      printf("N/A");
-
-    printf("\n");
-
-    temp = temp->next;
+  switch(symbol->value->type) {
+    case VALUE_INTEGER:
+      printf("integer\t");
+      break;
+    case VALUE_STRING:
+      printf("string\t");
+      break;
+    case VALUE_ARRAY:
+      printf("array\t");
+      break;
+    case VALUE_FUNCTION:
+      printf("function\t");
+      break;
+    case VALUE_LABEL:
+      printf("label\t");
+      break;
+    default:
+      return;
   }
+
+  if(symbol->is_constant && symbol->value->type < VALUE_FUNCTION) {
+    va_print(symbol->value);
+  } else {
+    printf("N/A");
+  }
+
+  printf("\n");
 }
 
 void sy_free(Symbol * symbol) {
-  if(symbol == NULL)
+  if(!symbol) {
     return;
-
-  while(symbol != NULL) {
-    Symbol * temp = symbol;
-
-    symbol = symbol->next;
-    temp->next = NULL;
-
-    if(temp->identifier != NULL)
-      free(temp->identifier);
-
-    va_free(temp->value, temp->type);
-
-    free(temp);
   }
+
+  free(symbol->identifier);
+  free(symbol->scope);
+  va_free(symbol->value);
 }
