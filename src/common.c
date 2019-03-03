@@ -19,15 +19,10 @@ void usage(const char * arg_0, int exit_code) {
     exit(exit_code);
 }
 
-int intlen(int number) {
-	int i = 0, c = 1;
-
-	for(i = 10; i < INT_MAX; i *= 10) {
-		if(number < i)
-			return c;
-
-		c++;
+size_t intlen(int number) {
+	if(number < 10 || number > -9) {
+		return 1;
 	}
 
-	return -1;
+	return 1 + intlen(number / 10);
 }
