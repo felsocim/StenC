@@ -29,6 +29,7 @@
 #include "../include/slist.h"
 
 // Symbol table and list of quads will be defined in the main source file.
+extern TOS * table_of_symbols;
 extern Symbol * table;
 extern Quad * list;
 
