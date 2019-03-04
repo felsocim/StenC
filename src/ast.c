@@ -93,7 +93,7 @@ ASTNode * ast_node_alloc(ASTType type) {
         goto memerr;
       }
       break;
-    case NODE_IDENTIFIER: // Identifiers are allocated in the table of symbols using associated functions.
+    case NODE_SYMBOL: // Identifiers are allocated in the table of symbols using associated functions.
     default: // Unknown AST node type detected
       return node;
   }
@@ -111,7 +111,7 @@ void ast_node_free(ASTNode * node) {
   switch(node->type) {
     case NODE_ARRAY_ACCESS:
       if(node->access->array) {
-        for(size_t i = 0; i < node->access->array->value->array.dimensions; i++) {
+        for(size_t i = 0; i < node->access->count; i++) {
           ast_delete_node(node->access->accessors[i]);
         }
       }
@@ -156,10 +156,13 @@ void ast_node_free(ASTNode * node) {
       free(node->function_call);
       break;
     case NODE_SCOPE:
-      ast_delete_node(node->scope->statements);
+      for(size_t i = 0; i < node->scope->count; i++) {
+        ast_delete_node(node->scope->statements[i]);
+      }
+      free(node->scope->statements);
       free(node->scope);
       break;
-    case NODE_IDENTIFIER: // Identifiers are freed using functions associated to the table of symbols.
+    case NODE_SYMBOL: // Identifiers are freed using functions associated to the table of symbols.
     default: // Unknown AST node type detected
       return;
   }
@@ -181,25 +184,25 @@ void ast_dump_and_indent(const ASTNode * node, size_t indent, const char * begin
   }
 
   switch(node->type) {
-    case NODE_IDENTIFIER:
-      switch(node->identifier->type) {
+    case NODE_SYMBOL:
+      switch(node->symbol->value->type) {
         case VALUE_INTEGER:
-          if(node->identifier->is_constant) {
-            printf("%s integer constant <name: %s, value: %d>\n", beginning, node->identifier->identifier, node->identifier->value->integer);
+          if(node->symbol->is_constant) {
+            printf("%s integer constant <name: %s, value: %d>\n", beginning, node->symbol->identifier, node->symbol->value->integer);
           } else {
-            printf("%s integer variable <name: %s>\n", beginning, node->identifier->identifier);
+            printf("%s integer variable <name: %s>\n", beginning, node->symbol->identifier);
           }
           break;
         case VALUE_STRING:
-          printf("%s string literal <name: %s, value: %s>\n", beginning, node->identifier->identifier, node->identifier->value->string);
+          printf("%s string literal <name: %s, value: %s>\n", beginning, node->symbol->identifier, node->symbol->value->string);
           break;
         case VALUE_ARRAY:
-          if(node->identifier->is_constant) {
-            printf("%s integer array constant <name: %s, values: ", beginning, node->identifier->identifier);
-            va_print(node->identifier);
+          if(node->symbol->is_constant) {
+            printf("%s integer array constant <name: %s, values: ", beginning, node->symbol->identifier);
+            va_print(node->symbol);
             printf(">\n");
           } else {
-            printf("%s integer array variable <name: %s>\n", beginning, node->identifier->identifier);
+            printf("%s integer array variable <name: %s>\n", beginning, node->symbol->identifier);
           }
           break;
         case VALUE_FUNCTION:
@@ -211,7 +214,7 @@ void ast_dump_and_indent(const ASTNode * node, size_t indent, const char * begin
     case NODE_ARRAY_ACCESS:
       printf("%s Array access <%s>\n", beginning, node->access->array->identifier);
 
-      size_t limit = node->access->array->value->array.dimensions;
+      size_t limit = node->access->count;
       if(node->access->array) {
         for(size_t i = 0; i < limit; i++) {
           ast_dump_and_indent(node->access->accessors[i], ++indent, (i < limit - 1 ? "├─" : "└─"));

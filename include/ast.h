@@ -31,7 +31,7 @@ typedef enum {
 
 // Enumeration of possible AST node types
 typedef enum {
-  NODE_IDENTIFIER,
+  NODE_SYMBOL,
   NODE_ARRAY_ACCESS,
   NODE_UNARY,
   NODE_BINARY,
@@ -48,6 +48,7 @@ typedef struct s_node ASTNode;
 // Represents an array access (e. g. array[N][0]).
 typedef struct {
   Symbol * array;
+  size_t count;
   ASTNode ** accessors;
 } ASTArrayAccess;
 
@@ -103,7 +104,7 @@ typedef struct {
 // Type definition of a general AST node
 typedef struct s_node {
   union {
-    Symbol * identifier;
+    Symbol * symbol;
     ASTArrayAccess * access;
     ASTUnary * unary;
     ASTBinary * binary;
