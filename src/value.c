@@ -1,11 +1,23 @@
 #include "../include/value.h"
 #include <string.h>
 
-Value * va_alloc() {
+Value * va_alloc(ValueType type) {
   Value * value = (Value *) malloc(sizeof(Value));
 
   if(!value) {
     return NULL;
+  }
+
+  value->type = type;
+
+  if(type == VALUE_ARRAY) {
+    value->array.values = NULL;
+    value->array.sizes = NULL;
+    value->array.dimensions = 0;
+  }
+
+  if(type == VALUE_STRING) {
+    value->string = NULL;
   }
 
   return value;

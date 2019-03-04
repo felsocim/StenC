@@ -27,7 +27,7 @@ typedef struct {
   ValueType type;
 } Value;
 
-Value * va_alloc();
+Value * va_alloc(ValueType);
 void va_print(const Value *);
 void va_free(Value *);
 
