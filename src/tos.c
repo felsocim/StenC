@@ -35,6 +35,20 @@ TOS * tos_append(TOS * table, Symbol * symbol) {
   return table;
 }
 
+Symbol * tos_lookup(const TOS * table, const char * identifier) {
+  if(!table || !identifier) {
+    return NULL;
+  }
+
+  for(size_t i = 0; i < table->index; i++) {
+    if(!strcmp(table->data[i]->identifier, identifier)) {
+      return table->data[i];
+    }
+  }
+
+  return NULL;
+}
+
 void tos_free(TOS * table) {
   if(!table) {
     return;
