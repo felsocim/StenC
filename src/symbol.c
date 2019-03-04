@@ -67,12 +67,10 @@ error:
 }
 
 Symbol * sy_label(const char * name) {
-  Value * va_label = va_alloc();
+  Value * va_label = va_alloc(VALUE_LABEL);
   if(!va_label) {
     return NULL;
   }
-
-  va_label->type = VALUE_LABEL;
 
   Symbol * label;
   if(name) {
