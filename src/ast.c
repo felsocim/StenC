@@ -29,7 +29,7 @@ const char * operator_to_string(Operator operator) {
       return "<";
     case BO_LESS_OR_EQUAL:
       return "<=";
-    case BO_GRATER_OR_EQUAL:
+    case BO_GREATER_OR_EQUAL:
       return ">=";
     case BO_GREATER:
       return ">";
@@ -48,6 +48,11 @@ ASTNode * ast_node_alloc(ASTType type) {
   }
   
   switch(type) {
+    case NODE_DECLARATION_LIST:
+      if(!(node->declaration_list = (ASTDeclarationList *) malloc(sizeof(ASTDeclarationList)))) {
+        goto memerr;
+      }
+      break;
     case NODE_ARRAY_ACCESS:
       if(!(node->access = (ASTArrayAccess *) malloc(sizeof(ASTArrayAccess)))) {
         goto memerr;
@@ -93,6 +98,7 @@ ASTNode * ast_node_alloc(ASTType type) {
         goto memerr;
       }
       break;
+    case NODE_SYMBOL_DECLARATION:
     case NODE_SYMBOL: // Identifiers are allocated in the table of symbols using associated functions.
     default: // Unknown AST node type detected
       return node;
@@ -109,59 +115,64 @@ void ast_node_free(ASTNode * node) {
   }
 
   switch(node->type) {
+    case NODE_DECLARATION_LIST:
+      for(size_t i = 0; i < node->declaration_list->count; i++) {
+        ast_node_free(node->declaration_list->declarations[i]);
+      }
+      free(node->declaration_list->declarations);
+      break;
     case NODE_ARRAY_ACCESS:
-      if(node->access->array) {
-        for(size_t i = 0; i < node->access->count; i++) {
-          ast_delete_node(node->access->accessors[i]);
-        }
+      for(size_t i = 0; i < node->access->count; i++) {
+        ast_node_free(node->access->accessors[i]);
       }
       free(node->access->accessors);
       break;
     case NODE_UNARY:
-      ast_delete_node(node->unary->expression);
+      ast_node_free(node->unary->expression);
       free(node->unary);
       break;
     case NODE_BINARY:
-      ast_delete_node(node->binary->LHS);
-      ast_delete_node(node->binary->RHS);
+      ast_node_free(node->binary->LHS);
+      ast_node_free(node->binary->RHS);
       free(node->binary);
       break;
     case NODE_IF:
-      ast_delete_node(node->if_conditional->condition);
-      ast_delete_node(node->if_conditional->onif);
-      ast_delete_node(node->if_conditional->onelse);
+      ast_node_free(node->if_conditional->condition);
+      ast_node_free(node->if_conditional->onif);
+      ast_node_free(node->if_conditional->onelse);
       free(node->if_conditional);
       break;
     case NODE_WHILE:
-      ast_delete_node(node->while_loop->condition);
-      ast_delete_node(node->while_loop->statements);
+      ast_node_free(node->while_loop->condition);
+      ast_node_free(node->while_loop->statements);
       free(node->while_loop);
       break;
     case NODE_FOR:
-      ast_delete_node(node->for_loop->initialization);
-      ast_delete_node(node->for_loop->condition);
-      ast_delete_node(node->for_loop->incrementation);
-      ast_delete_node(node->for_loop->statements);
+      ast_node_free(node->for_loop->initialization);
+      ast_node_free(node->for_loop->condition);
+      ast_node_free(node->for_loop->incrementation);
+      ast_node_free(node->for_loop->statements);
       free(node->for_loop);
       break;
     case NODE_FUNCTION_DECLARATION:
-      ast_delete_node(node->function_declaration->body);
+      ast_node_free(node->function_declaration->body);
       free(node->function_declaration->args);
       free(node->function_declaration);
       break;
     case NODE_FUNCTION_CALL:
       for(size_t i = 0; i < node->function_call->function->argc; i++) {
-        ast_delete_node(node->function_call->argv[i]);
+        ast_node_free(node->function_call->argv[i]);
       }      
       free(node->function_call);
       break;
     case NODE_SCOPE:
       for(size_t i = 0; i < node->scope->count; i++) {
-        ast_delete_node(node->scope->statements[i]);
+        ast_node_free(node->scope->statements[i]);
       }
       free(node->scope->statements);
       free(node->scope);
       break;
+    case NODE_SYMBOL_DECLARATION:
     case NODE_SYMBOL: // Identifiers are freed using functions associated to the table of symbols.
     default: // Unknown AST node type detected
       return;
@@ -184,13 +195,24 @@ void ast_dump_and_indent(const ASTNode * node, size_t indent, const char * begin
   }
 
   switch(node->type) {
+    case NODE_DECLARATION_LIST:
+      if(node->declaration_list->count > 0) {
+        if(node->declaration_list->count > 1) {
+          for(size_t i = 0; i < node->declaration_list->count - 1; i++) {
+            ast_dump_and_indent(node->declaration_list->declarations[i], indent, "├─");
+          }
+        }
+        ast_dump_and_indent(node->declaration_list->declarations[node->declaration_list->count - 1], indent, "└─");
+      }
+      break;
+    case NODE_SYMBOL_DECLARATION:
     case NODE_SYMBOL:
       switch(node->symbol->value->type) {
         case VALUE_INTEGER:
           if(node->symbol->is_constant) {
             printf("%s integer constant <name: %s, value: %d>\n", beginning, node->symbol->identifier, node->symbol->value->integer);
           } else {
-            printf("%s integer variable <name: %s>\n", beginning, node->symbol->identifier);
+            printf("%s integer variable (%s) <name: %s>\n", beginning, node->type == NODE_SYMBOL ? "reference" : "declaration", node->symbol->identifier);
           }
           break;
         case VALUE_STRING:
@@ -199,7 +221,7 @@ void ast_dump_and_indent(const ASTNode * node, size_t indent, const char * begin
         case VALUE_ARRAY:
           if(node->symbol->is_constant) {
             printf("%s integer array constant <name: %s, values: ", beginning, node->symbol->identifier);
-            va_print(node->symbol);
+            va_print(node->symbol->value);
             printf(">\n");
           } else {
             printf("%s integer array variable <name: %s>\n", beginning, node->symbol->identifier);
@@ -309,7 +331,7 @@ ASTFunctionDeclaration * ast_find_function_declaration(const ASTNode * tree, con
   }
 
   if(tree->type == NODE_FUNCTION_DECLARATION && sy_compare(tree->function_declaration->function, function)) {
-    return tree;
+    return tree->function_declaration;
   }
 
   if(tree->type == NODE_SCOPE) {

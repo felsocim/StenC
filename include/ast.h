@@ -24,14 +24,16 @@ typedef enum {
   BO_OR,
   BO_LESS,
   BO_LESS_OR_EQUAL,
-  BO_GRATER_OR_EQUAL,
+  BO_GREATER_OR_EQUAL,
   BO_GREATER,
   BO_EQUAL
 } Operator;
 
 // Enumeration of possible AST node types
 typedef enum {
+  NODE_SYMBOL_DECLARATION,
   NODE_SYMBOL,
+  NODE_DECLARATION_LIST,
   NODE_ARRAY_ACCESS,
   NODE_UNARY,
   NODE_BINARY,
@@ -44,6 +46,11 @@ typedef enum {
 } ASTType;
 
 typedef struct s_node ASTNode;
+
+typedef struct {
+  ASTNode ** declarations;
+  size_t count; 
+} ASTDeclarationList;
 
 // Represents an array access (e. g. array[N][0]).
 typedef struct {
@@ -102,9 +109,10 @@ typedef struct {
 } ASTScope;
 
 // Type definition of a general AST node
-typedef struct s_node {
+struct s_node {
   union {
     Symbol * symbol;
+    ASTDeclarationList * declaration_list;
     ASTArrayAccess * access;
     ASTUnary * unary;
     ASTBinary * binary;
