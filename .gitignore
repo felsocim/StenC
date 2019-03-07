@@ -8,9 +8,10 @@ obj
 stenc
 
 # Analyzers
+include/lexer.h
 include/compiler.h
-src/compiler.c
 src/lexer.c
+src/compiler.c
 
 # Output files
 *.s
