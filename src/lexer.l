@@ -3,12 +3,7 @@
   #include <stdio.h>
   #include <string.h>
   #include "../include/common.h"
-  #include "../include/value.h"
-  #include "../include/tos.h"
-  #include "../include/quad.h"
-  #include "../include/qlist.h"
-  #include "../include/tab.h"
-  #include "../include/slist.h"
+  #include "../include/ast.h"
   #include "../include/compiler.h"
 %}
 
@@ -18,20 +13,26 @@
 %option noyywrap
 %option noinput
 
-identifier        [a-zA-Z_]+[0-9a-zA-Z_]* { identifier } { yylval.string = strdup(yytext); return IDENTIFIER; }
-integer            0|([1-9][0-9]*) { integer } { yylval.integer = atoi(yytext); return INTEGER; }
-array_initializer \{([ \t\n]*{integer}[ \t\n]*,)*([ \t\n]*{integer})[ \t\n]*\} { array_initializer } { return ARRAY_INITIALIZER; }
-string            \"[\'0-9a-zA-Z ]*\" { string } { yylval.string = strdup(yytext); return STRING; }
+identifier [a-zA-Z_][0-9a-zA-Z_]*
+integer    0|([1-9][0-9]*)
+string     \"[\'0-9a-zA-Z ]*\"
 
 %%
 
 return  { return RETURN; }
 int     { return INT; }
 stencil { return STENCIL; }
+void    { return VOID; }
 if      { return IF; }
 else    { return ELSE; }
 while   { return WHILE; }
 for     { return FOR; }
+
+{identifier} { yylval.string = strdup(yytext); printf("Pojeb sa\n"); return IDENTIFIER; }
+
+{integer} { yylval.integer = atoi(yytext); return INTEGER; }
+
+{string} { yylval.string = strdup(yytext); return STRING; }
 
 \<   { return LESS; }
 \<\= { return LESS_OR_EQUAL; }
