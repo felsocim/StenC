@@ -26,3 +26,12 @@ size_t intlen(int number) {
 
 	return 1 + intlen(number / 10);
 }
+
+char * strdup(const char * __s) {
+	char * copy = (char *) malloc(strlen(__s) + 1);
+	if(!copy) {
+		return NULL;
+	}
+	copy = strcpy(copy, __s);
+	return copy;
+}

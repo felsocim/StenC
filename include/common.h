@@ -24,4 +24,6 @@ void failwith(const char *);
 void usage(const char *, int);
 size_t intlen(int);
 
+char * strdup(const char *);
+
 #endif // COMMON_H
