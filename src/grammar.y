@@ -1,12 +1,11 @@
 %{
   #include <stdarg.h>
-  #include "common.h"
   #include "../include/main.h"
 
   int yylex();
-  void yyerror(...) {
+  void yyerror(const char * __format, ...) {
     va_list arguments;
-    vfprintf(stderr, arguments);
+    vfprintf(stderr, __format, arguments);
   }
 %}
 
@@ -26,197 +25,224 @@
 
 %define parse.error verbose
 
-%token MAIN RETURN INT STENCIL IF ELSE WHILE FOR PRINTI PRINTF LESS LESS_OR_EQUAL GREATER GREATER_OR_EQUAL NOT AND OR EQUALEQUAL PLUS MINUS STAR SLASH DOLLAR EQUAL LEFT_PARENTHESIS RIGHT_PARENTHESIS LEFT_BRACKET RIGHT_BRACKET LEFT_BRACE RIGHT_BRACE COMMA COLON
+%token MAIN RETURN INT STENCIL IF ELSE WHILE FOR PRINTI PRINTF LESS LESS_OR_EQUAL GREATER GREATER_OR_EQUAL NOT AND OR EQUALEQUAL PLUS MINUS STAR SLASH DOLLAR EQUAL LEFT_PARENTHESIS RIGHT_PARENTHESIS LEFT_BRACKET RIGHT_BRACKET LEFT_BRACE RIGHT_BRACE COMMA COLON MINUSMINUS PLUSPLUS VOID
 %token <string> IDENTIFIER STRING
 %token <integer> INTEGER
 
-%type <node> list statement structControl variable declaration assignment expression
-%type <boolean> bool exprBool
-%type <iList> inittab listInit
-%type <array> rtab
-%left '+' '-'
-%left '*' '/'
+%type <integer> integer_constant
+%type <node> array_accessor function_call function_declaration parameter_list scope statement_list control_structure statement declaration declaration_only assignment assignment_array assignment_variable expression declaration_list
+%type <declarations> argument_list
+%type <initializers> initializer integer_constant_list
+
+%left PLUS MINUS
+%left STAR SLASH DOLLAR
 %nonassoc UMINUS UINCREMENT UDECREMENT
-%left '('
-%left BOP_COMPARISON BOP_OR
-%left BOP_AND
-%nonassoc BOP_NOT
-%start init
+%left LEFT_PARENTHESIS
+%left LESS LESS_OR_EQUAL GREATER GREATER_OR_EQUAL OR
+%left AND
+%nonassoc UNOT
+%start module
 
 %%
 
-initializer:
-  initializer_list {
-    $$.initializers = $1.initializers;
-  }
-  | initializer_unit {
-    $$.initializers = $1.initializers;
+module:
+  statement_list {
+    AST = $1;
+    YYACCEPT;
   }
   ;
 
-initializer_list:
-  LEFT_BRACE initializer_list RIGHT_BRACE {
-    $$.initializers = $1.initializers;
-  }
-  |
-  initializer_list COMMA initializer_unit {
-    $$.initializers.initializers = (int *) malloc(($1.initializers.count + $3.initializers.count) * sizeof(int));
-    if(!$$.initializers.initializers) {
+initializer:
+  integer_constant {
+    $$.initializers = (int *) malloc(sizeof(int));
+    if(!$$.initializers) {
       STENC_MEMORY_ERROR;
       YYABORT;
     }
 
-    for(size_t i = 0; i < $1.initializers.count; i++) {
-      $$.initializers.initializers[i] = $1.initializers.initializers[i];
-    }
-    for(size_t i = 0; i < $3.initializers.count; i++) {
-      $$.initializers.initializers[i + $1.initializers.count] = $3.initializers.initializers[i];
-    }
+    $$.count = 1;
+    $$.initializers[0] = $1;
   }
-  ;
-
-initializer_unit:
-  LEFT_BRACE integer_constant_list RIGHT_BRACE {
-    $$.initializers = $2.initializers;
+  | LEFT_BRACE integer_constant_list RIGHT_BRACE {
+    $$ = $2;
+  }
+  | LEFT_BRACE integer_constant_list COMMA RIGHT_BRACE{
+    $$ = $2;
   }
   ;
 
 integer_constant_list:
-  integer_constant_list COMMA integer_constant {
-    $$.initializers.count = $1.initializers.count + 1;
-    $1.initializers.initializers = (int *) realloc($$.initializers.initializers, sizeof(int));
-    if(!$1.initializers.initializers) {
+  integer_constant_list COMMA initializer {
+    $$.count = $1.count + $3.count;
+    $1.initializers = (int *) realloc($$.initializers, $$.count * sizeof(int));
+    if(!$1.initializers) {
       STENC_MEMORY_ERROR;
       YYABORT;
     }
 
-    $1.initializers.initializers[$1.initializers.count] = $3.integer;
-    $$.initializers.initializers = $1.initializers.initializers;
+    for(size_t i = $1.count; i < $$.count; i++) {
+      $1.initializers[i] = $3.initializers[i - $1.count];
+    }
+    $$.initializers = $1.initializers;
   }
-  | integer_constant {
-    $$.initializers.initializers = (int *) malloc(sizeof(int));
-    if(!$$.initializers.initializers) {
-      STENC_MEMORY_ERROR;
-      YYABORT;
-    }
-
-    $$.initializers.count = 1;
-    $$.initializers.initializers[0] = $1.integer;
+  | initializer {
+    $$ = $1;
   }
   ;
 
 integer_constant:
   MINUS INTEGER {
-    $$.integer = -$2.integer;
-  } INTEGER {
-    $$.integer = $1.integer;
+    $$ = -$2;
+  }
+  | INTEGER {
+    $$ = $1;
   }
   ;
 
 array_accessor:
 	array_accessor LEFT_BRACKET expression RIGHT_BRACKET {
-    $$.node->access->count++;
-    $$.node->access->accessors = (ASTNode **) realloc($$.node->access->accessors, $$.node->count * sizeof(ASTNode *));
-    if(!$$.node->access->accessors) {
-      $$.node->access->count = 0;
-      ast_node_free($$.node);
+    $$->access->count++;
+    $$->access->accessors = (ASTNode **) realloc($$->access->accessors, $$->access->count * sizeof(ASTNode *));
+    if(!$$->access->accessors) {
+      $$->access->count = 0;
+      ast_node_free($$);
       STENC_MEMORY_ERROR;
       YYABORT;
     }
 
-    $$.node->access->accessors[$$.node->access->count - 1] = $3.node;
+    $$->access->accessors[$$->access->count - 1] = $3;
   }
 	| LEFT_BRACKET expression RIGHT_BRACKET {
-    $$.node = ast_node_alloc(NODE_ARRAY_ACCESS);
-    if(!$$.node) {
+    $$ = ast_node_alloc(NODE_ARRAY_ACCESS);
+    if(!$$) {
       STENC_MEMORY_ERROR;
       YYABORT;
     }
 
-    $$.node->access->array = NULL;
-    $$.node->access->count = 1;
-    $$.node->access->accessors = (ASTNode **) malloc(sizeof(ASTNode *));
-    if(!$$.node->access->accessors) {
-      ast_node_free($$.node);
+    $$->access->array = NULL;
+    $$->access->count = 1;
+    $$->access->accessors = (ASTNode **) malloc(sizeof(ASTNode *));
+    if(!$$->access->accessors) {
+      ast_node_free($$);
       STENC_MEMORY_ERROR;
       YYABORT;
     }
 
-    $$.node->access->accessors[0] = $2.node;
+    $$->access->accessors[0] = $2;
   }
   ;
 
-argument:;
+function_call:
+  IDENTIFIER LEFT_PARENTHESIS argument_list RIGHT_PARENTHESIS {
+    // Check whether the called function has been declared.
+    Symbol * existing = NULL;
+    if(!(existing = tos_lookup(table_of_symbols, $1))) {
+      yyerror("Function '%s' was not declared!", $1);
+      YYABORT;
+    }
 
-statement:
-  assignment { // Assignment statement
+    ASTFunctionDeclaration * existing_function = ast_find_function_declaration(AST, existing);
+    if(!existing_function) {
+      yyerror("Function '%s' was not declared in this scope!", $1);
+      YYABORT;
+    }
 
-  }
-  | INT declaration_list { // Declaration of a variable or an array
+    if(existing_function->argc != $3.count) {
+      yyerror("Unexpected argument count in call of function '%s'!", $1);
+      YYABORT;
+    }
 
-  }
-  | STENCIL IDENTIFIER initializer_unit EQUAL initializer { // Declaration of a stencil
-
-  }
-  | IDENTIFIER 
-  ;
-
-declaration_list:
-  declaration_list COMMA declaration {
-    $$.declarations.count = $1.declarations.count + 1;
-    $1.declarations.declarations = (ASTNode **) realloc($1.declarations.declarations, $$.declarations.count * sizeof(ASTNode *));
-    if(!$1.declarations.declarations) {
+    $$ = ast_node_alloc(NODE_FUNCTION_CALL);
+    if(!$$) {
       STENC_MEMORY_ERROR;
       YYABORT;
     }
 
-    $1.declarations.declarations[$1.declarations.count] = $3.node;
-    $$.declarations.declarations = $1.declarations.declarations;
-  }
-  | declaration {
-    $$.declarations.declarations = (ASTNode **) malloc(sizeof(ASTNode *));
-    if(!$$.declarations.declarations) {
-      STENC_MEMORY_ERROR;
-      ast_node_free($$.node);
-      YYABORT;
-    }
-
-    $$.declarations.count = 1;
-    $$.declarations.declarations[0] = $1.node;
+    $$->function_call->function = existing_function;
+    $$->function_call->argv = $3.declarations;
   }
   ;
 
-declaration:
-  assignment_variable {
-    $$.node = $1.node;
-  }
-  | IDENTIFIER { // New variable identifier declaration (e. g. 'myvar')
-    $$.node = ast_node_alloc(NODE_SYMBOL);
-    if(!$$.node) {
+argument_list:
+  argument_list COMMA expression {
+    $$.count = $1.count + 1;
+    $1.declarations = (ASTNode **) realloc($1.declarations, $$.count * sizeof(ASTNode *));
+    if(!$1.declarations) {
       STENC_MEMORY_ERROR;
       YYABORT;
     }
 
-    // If the identifier has already been declared, raise a syntax error to prevent a redeclaration.
-    if(tos_lookup(table_of_symbols, $1.string)) {
-      yyerror("Redeclaration of '%s'!", $1.string);
-      ast_node_free($$.node);
+    $1.declarations[$1.count] = $3;
+    $$.declarations = $1.declarations;
+  }
+  | expression {
+    $$.declarations = (ASTNode **) malloc(sizeof(ASTNode *));
+    if(!$$.declarations) {
+      STENC_MEMORY_ERROR;
+      YYABORT;
+    }
+
+    $$.count = 1;
+    $$.declarations[0] = $1;
+  }
+  ;
+
+parameter_list:
+  parameter_list COMMA declaration_only {
+    $1->function_declaration->argc++;
+    $1->function_declaration->args = (ASTNode **) realloc($1->function_declaration->args, $1->function_declaration->argc * sizeof(ASTNode *));
+    if(!$1->function_declaration->args) {
+      STENC_MEMORY_ERROR;
+      YYABORT;
+    }
+
+    $1->function_declaration->args[$1->function_declaration->argc - 1] = $3;
+    $$ = $1;
+  }
+  | declaration_only {
+    $$ = ast_node_alloc(NODE_FUNCTION_DECLARATION);
+    if(!$$) {
+      STENC_MEMORY_ERROR;
+      YYABORT;
+    }
+
+    $$->function_declaration->argc = 1;
+    $$->function_declaration->args = (ASTNode **) malloc(sizeof(ASTNode *));
+    if(!$$->function_declaration->args) {
+      STENC_MEMORY_ERROR;
+      ast_node_free($$);
+      YYABORT;
+    }
+
+    $$->function_declaration->args[0] = $1;
+  }
+  ;
+
+function_declaration:
+  return_type IDENTIFIER LEFT_PARENTHESIS parameter_list RIGHT_PARENTHESIS scope {
+    $$ = $4;
+
+    // If the function has already been declared, raise a syntax error to prevent a redeclaration.
+    if(tos_lookup(table_of_symbols, $2)) {
+      yyerror("Redeclaration of '%s'!", $2);
+      ast_node_free($$);
       YYABORT;
     }
 
     // Create value object for the identifier.
-    Value * value = va_alloc(VALUE_INTEGER);
+    Value * value = va_alloc(VALUE_FUNCTION);
     if(!value) {
       STENC_MEMORY_ERROR;
-      ast_node_free($$.node);
+      ast_node_free($$);
       YYABORT;
     }
 
     // Create and add new symbol to the table of symbols.
-    Symbol * new_identifier = sy_variable($1.string, false, value);
+    Symbol * new_identifier = sy_variable($2, false, value);
     if(!new_identifier) {
       STENC_MEMORY_ERROR;
-      ast_node_free($$.node);
+      va_free(value);
+      ast_node_free($$);
       YYABORT;
     }
     
@@ -224,21 +250,310 @@ declaration:
     if(!table_of_symbols) {
       STENC_MEMORY_ERROR;
       sy_free(new_identifier);
-      ast_node_free($$.node);
+      ast_node_free($$);
       YYABORT;
     }
+
+    $$->function_declaration->body = $6;
   }
-  | IDENTIFIER array_accessor { // New array identifier declaration (e. g. 'tab[10][10]')
-    $$.node = ast_node_alloc(NODE_SYMBOL);
-    if(!$$.node) {
+  ;
+
+return_type:
+  INT | VOID;
+
+scope:
+  LEFT_BRACE statement_list RIGHT_BRACE {
+    $$ = $2;
+  }
+  ;
+
+statement_list:
+  statement COLON statement_list { // Statements (except control structures and function declarations) are separated by a colon.
+    $3->scope->count++;
+    $3->scope->statements = (ASTNode **) realloc($3->scope->statements, $3->scope->count * sizeof(ASTNode *));
+    if(!$3->scope->statements) {
+      STENC_MEMORY_ERROR;
+      YYABORT;
+    }
+
+    $3->scope->statements[$3->scope->count - 1] = $1;
+    $$ = $3;
+  }
+  | statement COLON {
+    $$ = ast_node_alloc(NODE_SCOPE);
+    if(!$$) {
+      STENC_MEMORY_ERROR;
+      YYABORT;
+    }
+
+    $$->scope->count = 1;
+    $$->scope->statements = (ASTNode **) malloc(sizeof(ASTNode *));
+    if(!$$->scope->statements) {
+      STENC_MEMORY_ERROR;
+      ast_node_free($$);
+      YYABORT;
+    }
+
+    $$->scope->statements[0] = $1;
+  }
+  | control_structure statement_list {
+    $2->scope->count++;
+    $2->scope->statements = (ASTNode **) realloc($2->scope->statements, $2->scope->count * sizeof(ASTNode *));
+    if(!$2->scope->statements) {
+      STENC_MEMORY_ERROR;
+      YYABORT;
+    }
+
+    $2->scope->statements[$2->scope->count - 1] = $1;
+    $$ = $2;
+  }
+  | control_structure {
+    $$ = ast_node_alloc(NODE_SCOPE);
+    if(!$$) {
+      STENC_MEMORY_ERROR;
+      YYABORT;
+    }
+
+    $$->scope->count = 1;
+    $$->scope->statements = (ASTNode **) malloc(sizeof(ASTNode *));
+    if(!$$->scope->statements) {
+      STENC_MEMORY_ERROR;
+      ast_node_free($$);
+      YYABORT;
+    }
+
+    $$->scope->statements[0] = $1;
+  }
+  ;
+
+control_structure:
+  IF LEFT_PARENTHESIS expression RIGHT_PARENTHESIS scope { // IF conditional structure without trailing ELSE block
+    $$ = ast_node_alloc(NODE_IF);
+    if(!$$) {
+      STENC_MEMORY_ERROR;
+      YYABORT;
+    }
+
+    $$->if_conditional->condition = $3;
+    $$->if_conditional->onif = $5;
+    $$->if_conditional->onelse = NULL;
+  }
+  | IF LEFT_PARENTHESIS expression RIGHT_PARENTHESIS scope ELSE scope { // IF conditional structure with trailing ELSE block
+    $$ = ast_node_alloc(NODE_IF);
+    if(!$$) {
+      STENC_MEMORY_ERROR;
+      YYABORT;
+    }
+
+    $$->if_conditional->condition = $3;
+    $$->if_conditional->onif = $5;
+    $$->if_conditional->onelse = $7; 
+  }
+  | WHILE LEFT_PARENTHESIS expression RIGHT_PARENTHESIS scope { // WHILE loop structure
+    $$ = ast_node_alloc(NODE_WHILE);
+    if(!$$) {
+      STENC_MEMORY_ERROR;
+      YYABORT;
+    }
+
+    $$->while_loop->condition = $3;
+    $$->while_loop->statements = $5;
+  }
+  | FOR LEFT_PARENTHESIS assignment COLON expression COLON expression RIGHT_PARENTHESIS scope { // FOR loop structure (no empty specifier items are allowed, also the first item should be an assignment expression)
+    $$ = ast_node_alloc(NODE_FOR);
+    if(!$$) {
+      STENC_MEMORY_ERROR;
+      YYABORT;
+    }
+
+    $$->for_loop->initialization = $3;
+    $$->for_loop->condition = $5;
+    $$->for_loop->incrementation = $7;
+    $$->for_loop->statements = $9;
+  }
+  | function_declaration {
+    $$ = $1;
+  }
+  ;
+
+statement:
+  assignment { // Assignment statement
+    $$ = $1;
+  }
+  | INT declaration_list { // Declaration of a variable or an array
+    $$ = $2;
+  }
+  | STENCIL IDENTIFIER LEFT_BRACE INTEGER COMMA INTEGER RIGHT_BRACE EQUAL initializer { // Declaration of a stencil
+    // Number of dimensions of a stencil should be a positive non-null integer
+    if($6 < 1) {
+      yyerror("Number of dimensions of a stencil should be a positive non-null constant, got '%d'!", $6);
+      YYABORT;
+    }
+
+    $$ = ast_node_alloc(NODE_SYMBOL_DECLARATION);
+    if(!$$) {
       STENC_MEMORY_ERROR;
       YYABORT;
     }
 
     // If the identifier has already been declared, raise a syntax error to prevent a redeclaration.
-    if(tos_lookup(table_of_symbols, $1.string)) {
-      yyerror("Redeclaration of '%s'!", $1.string);
-      ast_node_free($$.node);
+    if(tos_lookup(table_of_symbols, $2)) {
+      yyerror("Redeclaration of '%s'!", $2);
+      ast_node_free($$);
+      YYABORT;
+    }
+
+    // Create value object for the identifier.
+    Value * value = va_alloc(VALUE_STENCIL);
+    if(!value) {
+      STENC_MEMORY_ERROR;
+      ast_node_free($$);
+      YYABORT;
+    }
+
+    // Initialize the stencil value
+    value->array.dimensions = $6;
+    value->array.sizes = (size_t *) malloc(value->array.dimensions * sizeof(size_t));
+    if(!value->array.sizes) {
+      STENC_MEMORY_ERROR;
+      va_free(value);
+      ast_node_free($$);
+      YYABORT;
+    }
+
+    value->array.values = (int *) malloc(value->array.dimensions * sizeof(int));
+    if(!value->array.values) {
+      STENC_MEMORY_ERROR;
+      va_free(value);
+      ast_node_free($$);
+      YYABORT;
+    }
+
+    size_t one_size = 1 + $4 * 2, // Size of a stencil is computed based on its neighborhood's size (e. g. a 2D stencil with a neighborhood of 1 will be of size 3x3).
+           total_size = 1;
+    for(size_t i = 0; i < value->array.dimensions; i++) {
+      value->array.sizes[i] = one_size;
+      total_size *= one_size;
+    }
+
+    if(total_size != $9.count) {
+      yyerror("Unexpected element count in initializer of array '%s'!", $2);
+      va_free(value);
+      ast_node_free($$);
+      YYABORT;
+    }
+
+    for(size_t i = 0; i < total_size; i++) {
+      value->array.values[i] = $9.initializers[i];
+    }
+
+    // Create and add new symbol to the table of symbols.
+    Symbol * new_identifier = sy_variable($2, false, value);
+    if(!new_identifier) {
+      STENC_MEMORY_ERROR;
+      ast_node_free($$);
+      YYABORT;
+    }
+    
+    table_of_symbols = tos_append(table_of_symbols, new_identifier);
+    if(!table_of_symbols) {
+      STENC_MEMORY_ERROR;
+      sy_free(new_identifier);
+      ast_node_free($$);
+      YYABORT;
+    }
+  }
+  | function_call { // Function call
+    $$ = $1;
+  }
+  | RETURN expression { // Return statement with returning value
+
+  } RETURN { // Return statement without returning value (void)
+
+  }
+  ;
+
+declaration_list:
+  declaration_list COMMA declaration {
+    $1->declaration_list->count++;
+    $1->declaration_list->declarations = (ASTNode **) realloc($1->declaration_list->declarations, $1->declaration_list->count * sizeof(ASTNode *));
+    if(!$1->declaration_list->declarations) {
+      STENC_MEMORY_ERROR;
+      YYABORT;
+    }
+
+    $1->declaration_list->declarations[$1->declaration_list->count] = $3;
+    $$ = $1;
+  }
+  | declaration {
+    $$ = ast_node_alloc(NODE_DECLARATION_LIST);
+    if(!$$) {
+      STENC_MEMORY_ERROR;
+      YYABORT;
+    }
+
+    $$->declaration_list->declarations = (ASTNode **) malloc(sizeof(ASTNode *));
+    if(!$$->declaration_list->declarations) {
+      STENC_MEMORY_ERROR;
+      ast_node_free($$);
+      YYABORT;
+    }
+
+    $$->declaration_list->count = 1;
+    $$->declaration_list->declarations[0] = $1;
+  }
+  ;
+
+declaration_only:
+  IDENTIFIER { // New variable identifier declaration (e. g. 'myvar')
+    $$ = ast_node_alloc(NODE_SYMBOL_DECLARATION);
+    if(!$$) {
+      STENC_MEMORY_ERROR;
+      YYABORT;
+    }
+
+    // If the identifier has already been declared, raise a syntax error to prevent a redeclaration.
+    if(tos_lookup(table_of_symbols, $1)) {
+      yyerror("Redeclaration of '%s'!", $1);
+      ast_node_free($$);
+      YYABORT;
+    }
+
+    // Create value object for the identifier.
+    Value * value = va_alloc(VALUE_INTEGER);
+    if(!value) {
+      STENC_MEMORY_ERROR;
+      ast_node_free($$);
+      YYABORT;
+    }
+
+    // Create and add new symbol to the table of symbols.
+    Symbol * new_identifier = sy_variable($1, false, value);
+    if(!new_identifier) {
+      STENC_MEMORY_ERROR;
+      ast_node_free($$);
+      YYABORT;
+    }
+    
+    table_of_symbols = tos_append(table_of_symbols, new_identifier);
+    if(!table_of_symbols) {
+      STENC_MEMORY_ERROR;
+      sy_free(new_identifier);
+      ast_node_free($$);
+      YYABORT;
+    }
+  }
+  | IDENTIFIER array_accessor { // New array identifier declaration (e. g. 'tab[10][10]')
+    $$ = ast_node_alloc(NODE_SYMBOL_DECLARATION);
+    if(!$$) {
+      STENC_MEMORY_ERROR;
+      YYABORT;
+    }
+
+    // If the identifier has already been declared, raise a syntax error to prevent a redeclaration.
+    if(tos_lookup(table_of_symbols, $1)) {
+      yyerror("Redeclaration of '%s'!", $1);
+      ast_node_free($$);
       YYABORT;
     }
 
@@ -246,55 +561,64 @@ declaration:
     Value * value = va_alloc(VALUE_ARRAY);
     if(!value) {
       STENC_MEMORY_ERROR;
-      ast_node_free($$.node);
+      ast_node_free($$);
       YYABORT;
     }
 
-    value->array.dimensions = $2.node->access->count;
+    value->array.dimensions = $2->access->count;
     value->array.sizes = (size_t *) malloc(value->array.dimensions * sizeof(size_t));
     if(!value->array.sizes) {
       STENC_MEMORY_ERROR;
       va_free(value);
-      ast_node_free($$.node);
+      ast_node_free($$);
       YYABORT;
     }
 
     
     // Gather array dimension sizes.
     for(size_t i = 0; i < value->array.dimensions; i++) {
-      if($2.node->access->accessors[i]->type == NODE_SYMBOL &&
-         $2.node->access->accessors[i]->symbol->is_constant &&
-         $2.node->access->accessors[i]->symbol->value->type == VALUE_INTEGER &&
-         $2.node->access->accessors[i]->symbol->value->integer > 0) {
-        value->array.sizes[i] = (size_t) $2.node->access->accessors[i]->symbol->value->integer;
+      if($2->access->accessors[i]->type == NODE_SYMBOL &&
+         $2->access->accessors[i]->symbol->is_constant &&
+         $2->access->accessors[i]->symbol->value->type == VALUE_INTEGER &&
+         $2->access->accessors[i]->symbol->value->integer > 0) {
+        value->array.sizes[i] = (size_t) $2->access->accessors[i]->symbol->value->integer;
       } else {
-        yyerror("Expected dimension size to be a non-null positive integer literal in declaration of array '%s'!", $1.string);
+        yyerror("Expected dimension size to be a non-null positive integer literal in declaration of array '%s'!", $1);
         va_free(value);
-        ast_node_free($$.node);
+        ast_node_free($$);
         YYABORT;
       }
     }
 
     // Create and add new symbol to the table of symbols.
-    Symbol * new_identifier = sy_variable($1.string, false, value);
+    Symbol * new_identifier = sy_variable($1, false, value);
     if(!new_identifier) {
       STENC_MEMORY_ERROR;
       va_free(value);
-      ast_node_free($$.node);
+      ast_node_free($$);
       YYABORT;
     }
   }
+  ;
+
+declaration:
+  assignment_variable {
+    $$ = $1;
+  }
+  | declaration_only {
+    $$ = $1;
+  }
   | IDENTIFIER array_accessor EQUAL initializer { // New array identifier declaration with immediate definition using an initializer list (e. g. 'tab[3] = {1, 2, 3}')
-    $$.node = ast_node_alloc(NODE_SYMBOL);
-    if(!$$.node) {
+    $$ = ast_node_alloc(NODE_SYMBOL_DECLARATION);
+    if(!$$) {
       STENC_MEMORY_ERROR;
       YYABORT;
     }
 
     // If the identifier has already been declared, raise a syntax error to prevent a redeclaration.
-    if(tos_lookup(table_of_symbols, $1.string)) {
-      yyerror("Redeclaration of '%s'!", $1.string);
-      ast_node_free($$.node);
+    if(tos_lookup(table_of_symbols, $1)) {
+      yyerror("Redeclaration of '%s'!", $1);
+      ast_node_free($$);
       YYABORT;
     }
 
@@ -302,16 +626,16 @@ declaration:
     Value * value = va_alloc(VALUE_ARRAY);
     if(!value) {
       STENC_MEMORY_ERROR;
-      ast_node_free($$.node);
+      ast_node_free($$);
       YYABORT;
     }
 
-    value->array.dimensions = $2.node->access->count;
+    value->array.dimensions = $2->access->count;
     value->array.sizes = (size_t *) malloc(value->array.dimensions * sizeof(size_t));
     if(!value->array.sizes) {
       STENC_MEMORY_ERROR;
       va_free(value);
-      ast_node_free($$.node);
+      ast_node_free($$);
       YYABORT;
     }
 
@@ -319,24 +643,24 @@ declaration:
     // Gather array dimension sizes.
     size_t values_size = 1;
     for(size_t i = 0; i < value->array.dimensions; i++) {
-      if($2.node->access->accessors[i]->type == NODE_SYMBOL &&
-         $2.node->access->accessors[i]->symbol->is_constant &&
-         $2.node->access->accessors[i]->symbol->value->type == VALUE_INTEGER &&
-         $2.node->access->accessors[i]->symbol->value->integer > 0) {
-        value->array.sizes[i] = (size_t) $2.node->access->accessors[i]->symbol->value->integer;
+      if($2->access->accessors[i]->type == NODE_SYMBOL &&
+         $2->access->accessors[i]->symbol->is_constant &&
+         $2->access->accessors[i]->symbol->value->type == VALUE_INTEGER &&
+         $2->access->accessors[i]->symbol->value->integer > 0) {
+        value->array.sizes[i] = (size_t) $2->access->accessors[i]->symbol->value->integer;
         values_size *= value->array.sizes[i];
       } else {
-        yyerror("Expected dimension size to be a non-null positive integer literal in declaration of array '%s'!", $1.string);
+        yyerror("Expected dimension size to be a non-null positive integer literal in declaration of array '%s'!", $1);
         va_free(value);
-        ast_node_free($$.node);
+        ast_node_free($$);
         YYABORT;
       }
     }
 
-    if(values_size != $4.initializers.count) {
-      yyerror("Excess elements in initializer of array '%s'!", $1.string);
+    if(values_size != $4.count) {
+      yyerror("Unexpected element count in initializer of array '%s'!", $1);
       va_free(value);
-      ast_node_free($$.node);
+      ast_node_free($$);
       YYABORT;
     }
 
@@ -344,20 +668,20 @@ declaration:
     if(!value->array.values) {
       STENC_MEMORY_ERROR;
       va_free(value);
-      ast_node_free($$.node);
+      ast_node_free($$);
       YYABORT;
     }
 
     for(size_t i = 0; i < values_size; i++) {
-      value->array.values[i] = $4.initializers.initializers[i];
+      value->array.values[i] = $4.initializers[i];
     }
 
     // Create and add new symbol to the table of symbols.
-    Symbol * new_identifier = sy_variable($1.string, false, value);
+    Symbol * new_identifier = sy_variable($1, false, value);
     if(!new_identifier) {
       STENC_MEMORY_ERROR;
       va_free(value);
-      ast_node_free($$.node);
+      ast_node_free($$);
       YYABORT;
     }
   }
@@ -365,14 +689,14 @@ declaration:
 
 assignment:
   assignment_variable | assignment_array {
-    $$.node = $1.node;
+    $$ = $1;
   }
   ;
 
 assignment_variable:
   IDENTIFIER EQUAL expression { // Assignment to a variable (e. g. 'foo = 12;')
-    $$.node = ast_node_alloc(NODE_BINARY);
-    if(!$$.node) {
+    $$ = ast_node_alloc(NODE_BINARY);
+    if(!$$) {
       STENC_MEMORY_ERROR;
       YYABORT;
     }
@@ -381,572 +705,318 @@ assignment_variable:
     ASTNode * lvalue = ast_node_alloc(NODE_SYMBOL);
     if(!lvalue) {
       STENC_MEMORY_ERROR;
-      ast_node_free($$.node);
+      ast_node_free($$);
       YYABORT;
     }
 
     // Check whether the destination variable has been declared.
     Symbol * existing = NULL;
-    if(!(existing = tos_lookup(table_of_symbols, $1.string))) {
-      yyerror("Undeclared identifier '%s'!", $1.string);
+    if(!(existing = tos_lookup(table_of_symbols, $1))) {
+      yyerror("Undeclared identifier '%s'!", $1);
       YYABORT;
     }
 
     lvalue->symbol = existing;
 
-    $$.node->binary->operation = BO_ASSIGNMENT;
-    $$.node->binary->LHS = lvalue;
-    $$.node->binary->RHS = $3.node;
+    $$->binary->operation = BO_ASSIGNMENT;
+    $$->binary->LHS = lvalue;
+    $$->binary->RHS = $3;
   }
   ;
 
 assignment_array:  
   IDENTIFIER array_accessor EQUAL expression {
-    $$.node = ast_node_alloc(NODE_BINARY);
-    if(!$$.node) {
+    $$ = ast_node_alloc(NODE_BINARY);
+    if(!$$) {
       STENC_MEMORY_ERROR;
       YYABORT;
     }
 
     // Check whether the destination array has been declared.
     Symbol * existing = NULL;
-    if(!(existing = tos_lookup(table_of_symbols, $1.string))) {
-      yyerror("Undeclared identifier '%s'!", $1.string);
+    if(!(existing = tos_lookup(table_of_symbols, $1))) {
+      yyerror("Undeclared identifier '%s'!", $1);
       YYABORT;
     }
 
-    $2.node->access->array = existing;
+    $2->access->array = existing;
 
-    $$.node->binary->operation = BO_ASSIGNMENT;
-    $$.node->binary->LHS = $2.node;
-    $$.node->binary->RHS = $3.node;
+    $$->binary->operation = BO_ASSIGNMENT;
+    $$->binary->LHS = $2;
+    $$->binary->RHS = $4;
   }
   ;
 
 expression:
-  expression AND expression { // Logical 'and' (e. g. '(12 + test) && foo')
-    $$.node = ast_node_alloc(NODE_BINARY);
-    if(!$$.node) {
+  function_call { // Function call
+    $$ = $1;
+  }
+  | expression AND expression { // Logical 'and' (e. g. '(12 + test) && foo')
+    $$ = ast_node_alloc(NODE_BINARY);
+    if(!$$) {
       STENC_MEMORY_ERROR;
       YYABORT;
     }
 
-    $$.node->binary->operation = BO_AND;
-    $$.node->binary->LHS = $1.node;
-    $$.node->binary->RHS = $3.node;
+    $$->binary->operation = BO_AND;
+    $$->binary->LHS = $1;
+    $$->binary->RHS = $3;
   }
   | expression OR expression { // Logical 'or' (e. g. '(12 + test) || foo')
-    $$.node = ast_node_alloc(NODE_BINARY);
-    if(!$$.node) {
+    $$ = ast_node_alloc(NODE_BINARY);
+    if(!$$) {
       STENC_MEMORY_ERROR;
       YYABORT;
     }
 
-    $$.node->binary->operation = BO_OR;
-    $$.node->binary->LHS = $1.node;
-    $$.node->binary->RHS = $3.node;
+    $$->binary->operation = BO_OR;
+    $$->binary->LHS = $1;
+    $$->binary->RHS = $3;
   }
   | expression LESS expression { // Comparison operator '<' (e. g. '(12 + test) < foo')
-    $$.node = ast_node_alloc(NODE_BINARY);
-    if(!$$.node) {
+    $$ = ast_node_alloc(NODE_BINARY);
+    if(!$$) {
       STENC_MEMORY_ERROR;
       YYABORT;
     }
 
-    $$.node->binary->operation = BO_LESS;
-    $$.node->binary->LHS = $1.node;
-    $$.node->binary->RHS = $3.node;
+    $$->binary->operation = BO_LESS;
+    $$->binary->LHS = $1;
+    $$->binary->RHS = $3;
   }
   | expression LESS_OR_EQUAL expression { // Comparison operator '<=' (e. g. '(12 + test) <= foo')
-    $$.node = ast_node_alloc(NODE_BINARY);
-    if(!$$.node) {
+    $$ = ast_node_alloc(NODE_BINARY);
+    if(!$$) {
       STENC_MEMORY_ERROR;
       YYABORT;
     }
 
-    $$.node->binary->operation = BO_LESS_OR_EQUAL;
-    $$.node->binary->LHS = $1.node;
-    $$.node->binary->RHS = $3.node;
+    $$->binary->operation = BO_LESS_OR_EQUAL;
+    $$->binary->LHS = $1;
+    $$->binary->RHS = $3;
   }
   | expression GREATER_OR_EQUAL expression { // Comparison operator '>=' (e. g. '(12 + test) < foo')
-    $$.node = ast_node_alloc(NODE_BINARY);
-    if(!$$.node) {
+    $$ = ast_node_alloc(NODE_BINARY);
+    if(!$$) {
       STENC_MEMORY_ERROR;
       YYABORT;
     }
 
-    $$.node->binary->operation = BO_GREATER_OR_EQUAL;
-    $$.node->binary->LHS = $1.node;
-    $$.node->binary->RHS = $3.node;
+    $$->binary->operation = BO_GREATER_OR_EQUAL;
+    $$->binary->LHS = $1;
+    $$->binary->RHS = $3;
   }
   | expression GREATER expression { // Comparison operator '>' (e. g. '(12 + test) < foo')
-    $$.node = ast_node_alloc(NODE_BINARY);
-    if(!$$.node) {
+    $$ = ast_node_alloc(NODE_BINARY);
+    if(!$$) {
       STENC_MEMORY_ERROR;
       YYABORT;
     }
 
-    $$.node->binary->operation = BO_GREATER;
-    $$.node->binary->LHS = $1.node;
-    $$.node->binary->RHS = $3.node;
+    $$->binary->operation = BO_GREATER;
+    $$->binary->LHS = $1;
+    $$->binary->RHS = $3;
   }
   | expression EQUALEQUAL expression { // Comparison operator '==' (e. g. '(12 + test) < foo')
-    $$.node = ast_node_alloc(NODE_BINARY);
-    if(!$$.node) {
+    $$ = ast_node_alloc(NODE_BINARY);
+    if(!$$) {
       STENC_MEMORY_ERROR;
       YYABORT;
     }
 
-    $$.node->binary->operation = BO_EQUAL;
-    $$.node->binary->LHS = $1.node;
-    $$.node->binary->RHS = $3.node;
+    $$->binary->operation = BO_EQUAL;
+    $$->binary->LHS = $1;
+    $$->binary->RHS = $3;
   }
   | NOT expression %prec UNOT { // Logical negation (e. g. '!bar')
-    $$.node = ast_node_alloc(NODE_UNARY);
-    if(!$$.node) {
+    $$ = ast_node_alloc(NODE_UNARY);
+    if(!$$) {
       STENC_MEMORY_ERROR;
       YYABORT;
     }
 
-    $$.node->unary->operation = UO_NOT;
-    $$.node->unary->expression = $3.node;
+    $$->unary->operation = UO_NOT;
+    $$->unary->expression = $2;
   }
-  expression PLUS expression { // Sum (e. g. '3 + foo')
-    $$.node = ast_node_alloc(NODE_BINARY);
-    if(!$$.node) {
+  | expression PLUS expression { // Sum (e. g. '3 + foo')
+    $$ = ast_node_alloc(NODE_BINARY);
+    if(!$$) {
       STENC_MEMORY_ERROR;
       YYABORT;
     }
 
-    $$.node->binary->operation = BO_SUM;
-    $$.node->binary->LHS = $1.node;
-    $$.node->binary->RHS = $3.node;
+    $$->binary->operation = BO_SUM;
+    $$->binary->LHS = $1;
+    $$->binary->RHS = $3;
   }
   | expression MINUS expression { // Difference (e. g. 'bar - 12')
-    $$.node = ast_node_alloc(NODE_BINARY);
-    if(!$$.node) {
+    $$ = ast_node_alloc(NODE_BINARY);
+    if(!$$) {
       STENC_MEMORY_ERROR;
       YYABORT;
     }
 
-    $$.node->binary->operation = BO_DIFFERENCE;
-    $$.node->binary->LHS = $1.node;
-    $$.node->binary->RHS = $3.node;
+    $$->binary->operation = BO_DIFFERENCE;
+    $$->binary->LHS = $1;
+    $$->binary->RHS = $3;
   }
   | expression STAR expression { // Multiplication (e. g. 'foo * bar')
-    $$.node = ast_node_alloc(NODE_BINARY);
-    if(!$$.node) {
+    $$ = ast_node_alloc(NODE_BINARY);
+    if(!$$) {
       STENC_MEMORY_ERROR;
       YYABORT;
     }
 
-    $$.node->binary->operation = BO_MULTIPLICATION;
-    $$.node->binary->LHS = $1.node;
-    $$.node->binary->RHS = $3.node;
+    $$->binary->operation = BO_MULTIPLICATION;
+    $$->binary->LHS = $1;
+    $$->binary->RHS = $3;
   }
   | expression SLASH expression { // Division (e. g. '12 / (3 + foo * bar)')
-    $$.node = ast_node_alloc(NODE_BINARY);
-    if(!$$.node) {
+    $$ = ast_node_alloc(NODE_BINARY);
+    if(!$$) {
       STENC_MEMORY_ERROR;
       YYABORT;
     }
 
-    $$.node->binary->operation = BO_DIVISION;
-    $$.node->binary->LHS = $1.node;
-    $$.node->binary->RHS = $3.node;
+    $$->binary->operation = BO_DIVISION;
+    $$->binary->LHS = $1;
+    $$->binary->RHS = $3;
   }
-  | expression DOLLAR stencil { // Stencil binary operation (e. g. 'tab[3][3] $ sten1')
-    if($1.node->type != NODE_ARRAY_ACCESS) {
-      yyerror("Expected left-hand side of the expression to be an array access!");
+  | expression DOLLAR expression { // Stencil binary operation (e. g. 'tab[3][3] $ sten1')
+    if(($1->type == NODE_ARRAY_ACCESS && $3->type == NODE_SYMBOL && $3->symbol->value->type == VALUE_STENCIL) || ($3->type == NODE_ARRAY_ACCESS && $1->type == NODE_SYMBOL && $1->symbol->value->type == VALUE_STENCIL)) {
+      $$ = ast_node_alloc(NODE_BINARY);
+      if(!$$) {
+        STENC_MEMORY_ERROR;
+        YYABORT;
+      }
+
+      $$->binary->operation = BO_STENCIL;
+      $$->binary->LHS = $1;
+      $$->binary->RHS = $3;
+    } else {
+      yyerror("Stencil operator can be only applied between a stencil and an array reference!");
       YYABORT;
     }
-
-    $$.node = ast_node_alloc(NODE_BINARY);
-    if(!$$.node) {
-      STENC_MEMORY_ERROR;
-      YYABORT;
-    }
-
-    $$.node->binary->operation = BO_STENCIL;
-    $$.node->binary->LHS = $1.node;
-    $$.node->binary->RHS = $3.node;
-  }
-  | stencil DOLLAR expression { // Stencil binary operation (e. g. 'sten1 $ tab[3][3]')
-    if($3.node->type != NODE_ARRAY_ACCESS) {
-      yyerror("Expected right-hand side of the expression to be an array access!");
-      YYABORT;
-    }
-
-    $$.node = ast_node_alloc(NODE_BINARY);
-    if(!$$.node) {
-      STENC_MEMORY_ERROR;
-      YYABORT;
-    }
-
-    $$.node->binary->operation = BO_STENCIL;
-    $$.node->binary->LHS = $1.node;
-    $$.node->binary->RHS = $3.node;
   }
   | LEFT_PARENTHESIS expression RIGHT_PARENTHESIS { // Parenthesis expression (e. g. '(10 / foo)')
-    $$.node = $2.node;
+    $$ = $2;
   }
   | MINUS expression %prec UMINUS { // Sign change (e. g. '-(8 + bar)')
-    $$.node = ast_node_alloc(NODE_UNARY);
-    if(!$$.node) {
+    $$ = ast_node_alloc(NODE_UNARY);
+    if(!$$) {
       STENC_MEMORY_ERROR;
       YYABORT;
     }
 
-    $$.node->unary->operation = UO_MINUS;
-    $$.node->unary->expression = $2.node;
+    $$->unary->operation = UO_MINUS;
+    $$->unary->expression = $2;
   }
   | PLUSPLUS expression %prec UINCREMENT { // Unary increment with priority (e. g. '++i')
-    $$.node = ast_node_alloc(NODE_UNARY);
-    if(!$$.node) {
+    $$ = ast_node_alloc(NODE_UNARY);
+    if(!$$) {
       STENC_MEMORY_ERROR;
       YYABORT;
     }
 
-    $$.node->unary->operation = UO_PLUSPLUS;
-    $$.node->unary->expression = $2.node;
+    $$->unary->operation = UO_PLUSPLUS;
+    $$->unary->expression = $2;
   }
   | expression PLUS PLUS { // Unary increment (e. g. 'i++')
-    $$.node = ast_node_alloc(NODE_UNARY);
-    if(!$$.node) {
+    $$ = ast_node_alloc(NODE_UNARY);
+    if(!$$) {
       STENC_MEMORY_ERROR;
       YYABORT;
     }
 
-    $$.node->unary->operation = UO_PLUSPLUS;
-    $$.node->unary->expression = $1.node;
+    $$->unary->operation = UO_PLUSPLUS;
+    $$->unary->expression = $1;
   }
   | MINUSMINUS expression %prec UINCREMENT { // Unary decrement with priority (e. g. '--i')
-    $$.node = ast_node_alloc(NODE_UNARY);
-    if(!$$.node) {
+    $$ = ast_node_alloc(NODE_UNARY);
+    if(!$$) {
       STENC_MEMORY_ERROR;
       YYABORT;
     }
 
-    $$.node->unary->operation = UO_MINUSMINUS;
-    $$.node->unary->expression = $2.node;
+    $$->unary->operation = UO_MINUSMINUS;
+    $$->unary->expression = $2;
   }
   | expression MINUS MINUS { // Unary decrement (e. g. 'i--')
-    $$.node = ast_node_alloc(NODE_UNARY);
-    if(!$$.node) {
+    $$ = ast_node_alloc(NODE_UNARY);
+    if(!$$) {
       STENC_MEMORY_ERROR;
       YYABORT;
     }
 
-    $$.node->unary->operation = UO_MINUSMINUS;
-    $$.node->unary->expression = $1.node;
+    $$->unary->operation = UO_MINUSMINUS;
+    $$->unary->expression = $1;
   }
   | IDENTIFIER array_accessor { // Array item reference (e. g. 'tab[0][i + 1]')
     // Check if the array identified by the parsed identifier has been defined.
     Symbol * existing = NULL;
-    if((existing = tos_lookup(table_of_symbols, $1.string))) {
+    if((existing = tos_lookup(table_of_symbols, $1))) {
       // Create new symbol AST node.
-      $$.node = $2.node;
-      $$.node->access->array = existing;
+      $$ = $2;
+      $$->access->array = existing;
     } else {
       // Otherwise, abort parsing and raise a syntax error.
-      yyerror("Undefined variable '%s'!", $1.string);
-      ast_node_free($$.node);
+      yyerror("Undefined variable '%s'!", $1);
+      ast_node_free($$);
       YYABORT;
     }
   }
   | IDENTIFIER { // Variable reference (e. g. 'foo')
     // Check if the variable identified by the parsed identifier has been defined.
     Symbol * existing = NULL;
-    if((existing = tos_lookup(table_of_symbols, $1.string))) {
+    if((existing = tos_lookup(table_of_symbols, $1))) {
       // Create new symbol AST node.
-      $$.node = ast_node_alloc(NODE_SYMBOL);
-      if(!$$.node) {
+      $$ = ast_node_alloc(NODE_SYMBOL);
+      if(!$$) {
         STENC_MEMORY_ERROR;
         YYABORT;
       }
 
-      $$.node->symbol = existing;
+      $$->symbol = existing;
     } else {
       // Otherwise, abort parsing and raise a syntax error.
-      yyerror("Undefined variable '%s'!", $1.string);
+      yyerror("Undefined variable '%s'!", $1);
       YYABORT;
     }
   }
   | INTEGER { // Integer literal (e. g. '12')
     // Create new symbol AST node.
-    $$.node = ast_node_alloc(NODE_SYMBOL);
-    if(!$$.node) {
+    $$ = ast_node_alloc(NODE_SYMBOL);
+    if(!$$) {
       STENC_MEMORY_ERROR;
       YYABORT;
     }
 
     // Create value corresponding to the parsed integer value.
-    Value * integer = va_alloc();
+    Value * integer = va_alloc(VALUE_INTEGER);
     if(!integer) {
       STENC_MEMORY_ERROR;
-      ast_node_free($$.node);
+      ast_node_free($$);
       YYABORT;
     }
 
-    integer->type = VALUE_INTEGER;
-    integer->integer = $1.integer;
+    integer->integer = $1;
 
     // Create and then add a new temporary, having the parsed value, to the table of symbols and link it to the AST node we've created above.
-    $$.node->symbol = sy_temporary(true, integer);
-    if(!$$.node->symbol) {
+    $$->symbol = sy_temporary(true, integer);
+    if(!$$->symbol) {
       STENC_MEMORY_ERROR;
-      ast_node_free($$.node);
+      ast_node_free($$);
       YYABORT;
     }
 
-    table_of_symbols = tos_append(table_of_symbols, $$.node->symbol);
+    table_of_symbols = tos_append(table_of_symbols, $$->symbol);
     if(!table_of_symbols) {
       STENC_MEMORY_ERROR;
-      sy_free($$.node->symbol);
-      ast_node_free($$.node);
+      sy_free($$->symbol);
+      ast_node_free($$);
       YYABORT;
     }
   }
   ;
-
-init:
-	INT MAIN '(' ')' '{' list END ';' '}' {
-    list = $6.code;
-    printf("reconnaissance du main...\n");
-  }
-	;
-
-list:
-	statement ';' list {
-    $$.code = qu_concatenate($1.code, $3.code);
-  }
-  | statement ';' {
-    $$.code = $1.code;
-  }
-  | structControl list {
-    $$.code = qu_concatenate($1.code, $2.code);
-  }
-  | structControl {
-    $$.code = $1.code;
-  }
-  ;
-
-structControl:
-  IF '(' exprBool ')' '{' list '}' {
-    Quad * ontrue = qu_generate(), * onfalse = qu_generate();
-
-    table = sy_add_label(table, NULL);
-
-    ontrue->op = OP_LABEL;
-    ontrue->result = table;
-
-    table = sy_add_label(table, NULL);
-
-    onfalse->op = OP_LABEL;
-    onfalse->result = table;
-
-    $3.truelist = ql_complete($3.truelist, ontrue->result);
-    $3.falselist = ql_complete($3.falselist, onfalse->result);
-
-    $$.code = $3.code;
-    $$.code = qu_concatenate($$.code, ontrue);
-    $$.code = qu_concatenate($$.code, $6.code);
-    $$.code = qu_concatenate($$.code, onfalse);
-
-    ql_free($3.truelist);
-    ql_free($3.falselist);
-  }
-  | IF '(' exprBool ')' '{' list '}' ELSE '{' list '}' {
-    Quad * ontrue = qu_generate(), * onfalse = qu_generate(), * after = qu_generate(), * goafter = qu_generate();
-
-    table = sy_add_label(table, NULL);
-
-    ontrue->op = OP_LABEL;
-    ontrue->result = table;
-
-    table = sy_add_label(table, NULL);
-
-    onfalse->op = OP_LABEL;
-    onfalse->result = table;
-
-    table = sy_add_label(table, NULL);
-
-    after->op = OP_LABEL;
-    after->result = table;
-
-    goafter->op = OP_GOTO;
-    goafter->result = after->result;
-
-    $3.truelist = ql_complete($3.truelist, ontrue->result);
-    $3.falselist = ql_complete($3.falselist, onfalse->result);
-
-    $$.code = $3.code;
-    $$.code = qu_concatenate($$.code, ontrue);
-    $$.code = qu_concatenate($$.code, $6.code);
-    $$.code = qu_concatenate($$.code, goafter);
-    $$.code = qu_concatenate($$.code, onfalse);
-    $$.code = qu_concatenate($$.code, $10.code);
-    $$.code = qu_concatenate($$.code, after);
-
-    ql_free($3.truelist);
-    ql_free($3.falselist);
-  }
-  | WHILE '(' exprBool ')' '{' list '}'	{
-    Quad * condition = qu_generate(), * ontrue = qu_generate(), * verify = qu_generate(), * onfalse = qu_generate();
-
-    table = sy_add_label(table, NULL);
-    condition->op = OP_LABEL;
-    condition->result = table;
-
-    verify->op = OP_GOTO;
-    verify->result = condition->result;
-
-    table = sy_add_label(table, NULL);
-
-    ontrue->op = OP_LABEL;
-    ontrue->result = table;
-
-    table = sy_add_label(table, NULL);
-
-    onfalse->op = OP_LABEL;
-    onfalse->result = table;
-
-    $3.truelist = ql_complete($3.truelist, ontrue->result);
-    $3.falselist = ql_complete($3.falselist, onfalse->result);
-
-    $$.code = qu_concatenate(condition, $3.code);
-    $$.code = qu_concatenate($$.code, ontrue);
-    $$.code = qu_concatenate($$.code, $6.code);
-    $$.code = qu_concatenate($$.code, verify);
-    $$.code = qu_concatenate($$.code, onfalse);
-
-    ql_free($3.truelist);
-    ql_free($3.falselist);
-  }
-  | FOR '(' assignment ';' exprBool ';' assignment ')' '{' list '}' {
-
-    Quad * condition = qu_generate(), * ontrue = qu_generate(), * verify = qu_generate(), * onfalse = qu_generate();
-
-    table = sy_add_label(table, NULL);
-    condition->op = OP_LABEL;
-    condition->result = table;
-
-    verify->op = OP_GOTO;
-    verify->result = condition->result;
-
-    table = sy_add_label(table, NULL);
-
-    ontrue->op = OP_LABEL;
-    ontrue->result = table;
-
-    table = sy_add_label(table, NULL);
-
-    onfalse->op = OP_LABEL;
-    onfalse->result = table;
-
-    $5.truelist = ql_complete($5.truelist, ontrue->result);
-    $5.falselist = ql_complete($5.falselist, onfalse->result);
-    $$.code = qu_concatenate($$.code, $3.code);
-    $$.code = qu_concatenate($$.code, condition);    
-    $$.code = qu_concatenate($$.code, $5.code);    
-    $$.code = qu_concatenate($$.code, ontrue);
-    $$.code = qu_concatenate($$.code, $10.code);
-    $$.code = qu_concatenate($$.code, $7.code);
-    $$.code = qu_concatenate($$.code, verify);
-    $$.code = qu_concatenate($$.code, onfalse);
-
-    ql_free($5.truelist);
-    ql_free($5.falselist);
-}
-;
-
-statement:
-  INT variable {
-      $$.code = $2.code;
-    }
-  | assignment {
-      $$.code = $1.code;
-    }
-  | PRINTI '(' expression ')' {
-    Quad * n = qu_generate();
-
-    n->op = OP_CALL_PRINTI;
-    n->arg1 = $3.pointer;
-    $$.code = qu_concatenate($3.code, n);
-  }
-  | PRINTI '(' exprBool ')' {
-    Quad * n = qu_generate();
-
-    n->op = OP_CALL_PRINTI;
-    n->arg1 = $3.pointer;
-    $$.code = qu_concatenate($3.code, n);
-  }
-  | PRINTF '(' STRING ')' {
-    Value * string = va_alloc();
-    Quad * n = qu_generate();
-
-    string->string = yylval.name;
-
-    table = sy_add_string(table, string);
-
-    n->op = OP_CALL_PRINTF;
-    n->arg1 = table;
-    $$.code = n;
-  }
-  | STENCIL ID '{' inittab '}' '=' listInit {
-    if($4->size != 2) {
-      fprintf(stderr, "Syntax error: Too %s parameters for type stencil of '%s'!\n", $4->size < 2 ? "few" : "much", $2);
-      exit(EXIT_FAILURE);
-    }
-
-    size_t dimensions = (size_t) intListGet($4, 1),
-      neighbors = (size_t) intListGet($4, 0),
-      i = 0;
-    int * current = NULL;
-    size_t * iterator = (size_t *) calloc(dimensions, sizeof(size_t));
-
-    if(iterator == NULL)
-      failwith("Failed to reserve memory for stencil array iterator");
-
-    Value * stencil = va_alloc();
-
-    stencil->array.sizes = (size_t *) malloc(dimensions * sizeof(size_t));
-
-    if(stencil->array.sizes == NULL)
-      failwith("Failed to reserve memory for stencil array sizes");
-
-    for(i = 0; i < dimensions; i++) {
-      stencil->array.sizes[i] = 2 * neighbors + 1;
-    }
-
-    stencil->array.dimensions = dimensions;
-
-    stencil->array.values = (int *) malloc(((size_t) pow((double) (2 * neighbors + 1), (double) dimensions)) * sizeof(int));
-
-    if(stencil->array.values == NULL)
-      failwith("Failed to reserve memory for stencil array values");
-
-    i = 0;
-
-    do {
-      current = va_array_get(stencil, iterator);
-      *current = intListGet($7, i);
-      i++;
-    } while(va_array_forward(iterator, stencil->array.sizes, stencil->array.dimensions)); // Add test on i
-
-    if(sy_lookup(table, $2) == NULL) {
-      table = sy_add_variable(table, $2, true, TYPE_ARRAY, stencil);
-      $$.pointer = table;
-    } else {
-      fprintf(stderr, "Syntax error: Identifier %s has already been declared in this scope!\n", $2);
-      exit(EXIT_FAILURE);
-    }
-
-    $$.code = NULL;
-  }
-  ;
-
-
-
 
 %%
