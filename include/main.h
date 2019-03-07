@@ -20,18 +20,14 @@
 #ifndef __MAIN_H
 #define __MAIN_H
 
-#include "../include/common.h"
-#include "../include/value.h"
-#include "../include/tos.h"
-#include "../include/quad.h"
-#include "../include/qlist.h"
-#include "../include/tab.h"
-#include "../include/slist.h"
+#include "common.h"
+#include "tos.h"
+#include "ast.h"
+#include "lexer.h"
 
 // Symbol table and list of quads will be defined in the main source file.
 extern TOS * table_of_symbols;
-extern Symbol * table;
-extern Quad * list;
+extern ASTNode * AST;
 
 extern int yyparse(void);
 

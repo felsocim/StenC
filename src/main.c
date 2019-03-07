@@ -3,28 +3,21 @@
 const char * usage_message = "Usage: compiler";
 const char * help_message = "Compiler Help Message";
 
-Symbol * table = NULL;
-Quad * list = NULL;
+TOS * table_of_symbols = NULL;
+ASTNode * AST = NULL;
 
 int main(int argc, char ** argv) {
   if(argc != 2)
     failwith("Argument(s) mismatch");
 
+  table_of_symbols = tos_alloc();
+
+  yyin = fopen(argv[1], "r");
+
   yyparse();
-  sy_print(table);
-  qu_print(list);
-
-  FILE * output = fopen(argv[1], "w+");
-
-  if(output == NULL)
-    failwith("Failed to open assembly output file");
-
-  qu_assemble(list, table, output);
-
-  fclose(output);
-
-  sy_free(table);
-  qu_free(list);
+  
+  tos_free(table_of_symbols);
+  ast_node_free(AST);
 
   return 0;
 }
