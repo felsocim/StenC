@@ -9,6 +9,7 @@ typedef enum {
   VALUE_INTEGER,
   VALUE_STRING,
   VALUE_ARRAY,
+  VALUE_STENCIL,
   VALUE_FUNCTION,
   VALUE_LABEL
 } ValueType;
