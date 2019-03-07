@@ -46,11 +46,11 @@ Symbol * sy_temporary(bool is_constant, Value * value) {
     goto error;
   }
 
-  if(snprintf(name, "%s%d", length, SY_TEMPORARY_PREFIX, number) != (int) length) {
+  if(snprintf(name, length, "%s%d", SY_TEMPORARY_PREFIX, number) != (int) length) {
     goto clean;
   }
 
-  Symbol * temporary = sy_add_variable(name, is_constant, value);
+  Symbol * temporary = sy_variable(name, is_constant, value);
   if(!temporary) {
     goto clean;
   }
