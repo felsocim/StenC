@@ -30,7 +30,7 @@
 %token <integer> INTEGER
 
 %type <integer> integer_constant
-%type <node> array_accessor function_call function_declaration parameter_list scope statement_list control_structure statement declaration declaration_only assignment assignment_array assignment_variable expression declaration_list
+%type <node> array_accessor function_call function_declaration parameter_list scope statement_list control_structure statement declaration declaration_only assignment assignment_array assignment_variable expression declaration_list unary_increment_or_decrement
 %type <declarations> argument_list
 %type <initializers> initializer integer_constant_list
 
@@ -216,10 +216,20 @@ parameter_list:
 
     $$->function_declaration->args[0] = $1;
   }
+  | {
+    $$ = ast_node_alloc(NODE_FUNCTION_DECLARATION);
+    if(!$$) {
+      STENC_MEMORY_ERROR;
+      YYABORT;
+    }
+
+    $$->function_declaration->argc = 0;
+    $$->function_declaration->args = NULL;
+  }
   ;
 
 function_declaration:
-  return_type IDENTIFIER LEFT_PARENTHESIS parameter_list RIGHT_PARENTHESIS scope {
+  INT IDENTIFIER LEFT_PARENTHESIS parameter_list RIGHT_PARENTHESIS scope {
     $$ = $4;
 
     // If the function has already been declared, raise a syntax error to prevent a redeclaration.
@@ -254,12 +264,14 @@ function_declaration:
       YYABORT;
     }
 
+    //$6->scope->name =
+    $$->function_declaration->function = new_identifier;
+    $$->function_declaration->returns = NULL;
+    $$->function_declaration->argc = 0;
+    $$->function_declaration->args = NULL;
     $$->function_declaration->body = $6;
   }
   ;
-
-return_type:
-  INT | VOID;
 
 scope:
   LEFT_BRACE statement_list RIGHT_BRACE {
@@ -275,6 +287,8 @@ statement_list:
       STENC_MEMORY_ERROR;
       YYABORT;
     }
+
+    printf("Pridávam statement (mám: %lu)\n", $3->scope->count);
 
     $3->scope->statements[$3->scope->count - 1] = $1;
     $$ = $3;
@@ -466,10 +480,8 @@ statement:
   | function_call { // Function call
     $$ = $1;
   }
-  | RETURN expression { // Return statement with returning value
-
-  } RETURN { // Return statement without returning value (void)
-
+  | unary_increment_or_decrement {
+    $$ = $1;
   }
   ;
 
@@ -482,12 +494,17 @@ declaration_list:
       YYABORT;
     }
 
+    if($3->type == NODE_BINARY) {
+      $3->binary->LHS->type = NODE_SYMBOL_DECLARATION;
+    }
+
     $1->declaration_list->declarations[$1->declaration_list->count] = $3;
     $$ = $1;
   }
   | declaration {
     $$ = ast_node_alloc(NODE_DECLARATION_LIST);
     if(!$$) {
+      perror("Do piče");
       STENC_MEMORY_ERROR;
       YYABORT;
     }
@@ -497,6 +514,10 @@ declaration_list:
       STENC_MEMORY_ERROR;
       ast_node_free($$);
       YYABORT;
+    }
+
+    if($1->type == NODE_BINARY) {
+      $1->binary->LHS->type = NODE_SYMBOL_DECLARATION;
     }
 
     $$->declaration_list->count = 1;
@@ -595,6 +616,14 @@ declaration_only:
     if(!new_identifier) {
       STENC_MEMORY_ERROR;
       va_free(value);
+      ast_node_free($$);
+      YYABORT;
+    }
+
+    table_of_symbols = tos_append(table_of_symbols, new_identifier);
+    if(!table_of_symbols) {
+      STENC_MEMORY_ERROR;
+      sy_free(new_identifier);
       ast_node_free($$);
       YYABORT;
     }
@@ -709,14 +738,38 @@ assignment_variable:
       YYABORT;
     }
 
-    // Check whether the destination variable has been declared.
-    Symbol * existing = NULL;
-    if(!(existing = tos_lookup(table_of_symbols, $1))) {
-      yyerror("Undeclared identifier '%s'!", $1);
+    // Create value object for the identifier.
+    Value * value = va_alloc(VALUE_INTEGER);
+    if(!value) {
+      STENC_MEMORY_ERROR;
+      ast_node_free($$);
       YYABORT;
     }
 
-    lvalue->symbol = existing;
+    bool is_constant = false;
+
+    if($3->type == NODE_SYMBOL && $3->symbol->is_constant) {
+      value->integer = $3->symbol->value->integer;
+      is_constant = true;
+    }
+
+    // Create and add new symbol to the table of symbols.
+    Symbol * new_identifier = sy_variable($1, is_constant, value);
+    if(!new_identifier) {
+      STENC_MEMORY_ERROR;
+      ast_node_free($$);
+      YYABORT;
+    }
+
+    table_of_symbols = tos_append(table_of_symbols, new_identifier);
+    if(!table_of_symbols) {
+      STENC_MEMORY_ERROR;
+      sy_free(new_identifier);
+      ast_node_free($$);
+      YYABORT;
+    }
+
+    lvalue->symbol = new_identifier;
 
     $$->binary->operation = BO_ASSIGNMENT;
     $$->binary->LHS = lvalue;
@@ -744,6 +797,49 @@ assignment_array:
     $$->binary->operation = BO_ASSIGNMENT;
     $$->binary->LHS = $2;
     $$->binary->RHS = $4;
+  }
+  ;
+
+unary_increment_or_decrement:
+  PLUSPLUS expression %prec UINCREMENT { // Unary increment with priority (e. g. '++i')
+    $$ = ast_node_alloc(NODE_UNARY);
+    if(!$$) {
+      STENC_MEMORY_ERROR;
+      YYABORT;
+    }
+
+    $$->unary->operation = UO_PLUSPLUS;
+    $$->unary->expression = $2;
+  }
+  | expression PLUSPLUS { // Unary increment (e. g. 'i++')
+    $$ = ast_node_alloc(NODE_UNARY);
+    if(!$$) {
+      STENC_MEMORY_ERROR;
+      YYABORT;
+    }
+
+    $$->unary->operation = UO_PLUSPLUS;
+    $$->unary->expression = $1;
+  }
+  | MINUSMINUS expression %prec UINCREMENT { // Unary decrement with priority (e. g. '--i')
+    $$ = ast_node_alloc(NODE_UNARY);
+    if(!$$) {
+      STENC_MEMORY_ERROR;
+      YYABORT;
+    }
+
+    $$->unary->operation = UO_MINUSMINUS;
+    $$->unary->expression = $2;
+  }
+  | expression MINUSMINUS { // Unary decrement (e. g. 'i--')
+    $$ = ast_node_alloc(NODE_UNARY);
+    if(!$$) {
+      STENC_MEMORY_ERROR;
+      YYABORT;
+    }
+
+    $$->unary->operation = UO_MINUSMINUS;
+    $$->unary->expression = $1;
   }
   ;
 
@@ -911,45 +1007,8 @@ expression:
     $$->unary->operation = UO_MINUS;
     $$->unary->expression = $2;
   }
-  | PLUSPLUS expression %prec UINCREMENT { // Unary increment with priority (e. g. '++i')
-    $$ = ast_node_alloc(NODE_UNARY);
-    if(!$$) {
-      STENC_MEMORY_ERROR;
-      YYABORT;
-    }
-
-    $$->unary->operation = UO_PLUSPLUS;
-    $$->unary->expression = $2;
-  }
-  | expression PLUS PLUS { // Unary increment (e. g. 'i++')
-    $$ = ast_node_alloc(NODE_UNARY);
-    if(!$$) {
-      STENC_MEMORY_ERROR;
-      YYABORT;
-    }
-
-    $$->unary->operation = UO_PLUSPLUS;
-    $$->unary->expression = $1;
-  }
-  | MINUSMINUS expression %prec UINCREMENT { // Unary decrement with priority (e. g. '--i')
-    $$ = ast_node_alloc(NODE_UNARY);
-    if(!$$) {
-      STENC_MEMORY_ERROR;
-      YYABORT;
-    }
-
-    $$->unary->operation = UO_MINUSMINUS;
-    $$->unary->expression = $2;
-  }
-  | expression MINUS MINUS { // Unary decrement (e. g. 'i--')
-    $$ = ast_node_alloc(NODE_UNARY);
-    if(!$$) {
-      STENC_MEMORY_ERROR;
-      YYABORT;
-    }
-
-    $$->unary->operation = UO_MINUSMINUS;
-    $$->unary->expression = $1;
+  | unary_increment_or_decrement {
+    $$ = $1;
   }
   | IDENTIFIER array_accessor { // Array item reference (e. g. 'tab[0][i + 1]')
     // Check if the array identified by the parsed identifier has been defined.
