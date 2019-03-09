@@ -23,12 +23,17 @@ TOS * tos_append(TOS * table, Symbol * symbol) {
     return NULL;
   }
 
+  printf("Curr %lu from %lu\n", table->index, table->size);
+
   if(table->index >= table->size) {
-    table->data = (Symbol **) realloc(table->data, table->size + TOS_GROW_SIZE);
+    table->size += TOS_GROW_SIZE;
+    table->data = (Symbol **) realloc(table->data, table->size * sizeof(Symbol *));
     if(!table->data) {
       return NULL;
     }
   }
+
+  printf("Writing to %lu from %lu\n", table->index, table->size);
 
   table->data[table->index++] = symbol;
 
