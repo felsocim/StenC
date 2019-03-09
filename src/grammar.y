@@ -2,6 +2,8 @@
   #include <stdarg.h>
   #include "../include/main.h"
 
+  static int scope = 0;
+
   int yylex();
   void yyerror(const char * __format, ...) {
     va_list arguments;
@@ -17,10 +19,6 @@
     ASTNode ** declarations;
     size_t count;
   } declarations;
-  struct {
-    int * initializers;
-    size_t count;
-  } initializers;
 }
 
 %define parse.error verbose
@@ -30,9 +28,8 @@
 %token <integer> INTEGER
 
 %type <integer> integer_constant
-%type <node> array_accessor function_call function_declaration parameter_list scope statement_list control_structure statement declaration declaration_only assignment assignment_array assignment_variable expression declaration_list unary_increment_or_decrement
+%type <node> array_accessor function_call function_declaration parameter_list scope statement_list control_structure statement declaration declaration_only assignment assignment_array assignment_variable expression declaration_list unary_increment_or_decrement initializer integer_constant_list
 %type <declarations> argument_list
-%type <initializers> initializer integer_constant_list
 
 %left PLUS MINUS
 %left STAR SLASH DOLLAR
@@ -54,14 +51,38 @@ module:
 
 initializer:
   integer_constant {
-    $$.initializers = (int *) malloc(sizeof(int));
-    if(!$$.initializers) {
+    Value * array = va_alloc(VALUE_ARRAY);
+    if(!array) {
       STENC_MEMORY_ERROR;
       YYABORT;
     }
 
-    $$.count = 1;
-    $$.initializers[0] = $1;
+    array->values = g_array_new(FALSE, FALSE, sizeof(int));
+    if(!array->values) {
+      STENC_MEMORY_ERROR;
+      va_free(array);
+      YYABORT;
+    }
+
+    array->values = g_array_append_val(array->values, $1);
+
+    Symbol * symbol = sy_alloc();
+    if(!symbol) {
+      STENC_MEMORY_ERROR;
+      va_free(array);
+      YYABORT;
+    }
+
+    symbol->value = array;
+
+    $$ = ast_node_alloc(NODE_SYMBOL_DECLARATION);
+    if(!$$) {
+      STENC_MEMORY_ERROR;
+      sy_free(symbol);
+      YYABORT;
+    }
+
+    $$->symbol = symbol;
   }
   | LEFT_BRACE integer_constant_list RIGHT_BRACE {
     $$ = $2;
@@ -73,17 +94,8 @@ initializer:
 
 integer_constant_list:
   integer_constant_list COMMA initializer {
-    $$.count = $1.count + $3.count;
-    $1.initializers = (int *) realloc($$.initializers, $$.count * sizeof(int));
-    if(!$1.initializers) {
-      STENC_MEMORY_ERROR;
-      YYABORT;
-    }
-
-    for(size_t i = $1.count; i < $$.count; i++) {
-      $1.initializers[i] = $3.initializers[i - $1.count];
-    }
-    $$.initializers = $1.initializers;
+    $1->symbol->value->array->values = g_array_append_vals($1->symbol->value->array->values, $3->symbol->value->array->values, $3->symbol->value->array->values->len);
+    $$ = $1;
   }
   | initializer {
     $$ = $1;
@@ -101,16 +113,8 @@ integer_constant:
 
 array_accessor:
 	array_accessor LEFT_BRACKET expression RIGHT_BRACKET {
-    $$->access->count++;
-    $$->access->accessors = (ASTNode **) realloc($$->access->accessors, $$->access->count * sizeof(ASTNode *));
-    if(!$$->access->accessors) {
-      $$->access->count = 0;
-      ast_node_free($$);
-      STENC_MEMORY_ERROR;
-      YYABORT;
-    }
-
-    $$->access->accessors[$$->access->count - 1] = $3;
+    $1->access->accessors = g_ptr_array_add($1->access->accessors, (gpointer) $3);
+    $$ = $1;
   }
 	| LEFT_BRACKET expression RIGHT_BRACKET {
     $$ = ast_node_alloc(NODE_ARRAY_ACCESS);
@@ -119,84 +123,76 @@ array_accessor:
       YYABORT;
     }
 
-    $$->access->array = NULL;
-    $$->access->count = 1;
-    $$->access->accessors = (ASTNode **) malloc(sizeof(ASTNode *));
+    $$->access->accessors = g_ptr_array_new();
     if(!$$->access->accessors) {
       ast_node_free($$);
       STENC_MEMORY_ERROR;
       YYABORT;
     }
 
-    $$->access->accessors[0] = $2;
+    $$->access->accessors = g_ptr_array_add($$->access->accessors, (gpointer) $2);
   }
   ;
 
 function_call:
   IDENTIFIER LEFT_PARENTHESIS argument_list RIGHT_PARENTHESIS {
-    // Check whether the called function has been declared.
-    Symbol * existing = NULL;
-    if(!(existing = tos_lookup(table_of_symbols, $1))) {
-      yyerror("Function '%s' was not declared!", $1);
+    Value * function = va_alloc(VALUE_FUNCTION);
+    if(!function) {
+      STENC_MEMORY_ERROR;
       YYABORT;
     }
 
-    ASTFunctionDeclaration * existing_function = ast_find_function_declaration(AST, existing);
-    if(!existing_function) {
-      yyerror("Function '%s' was not declared in this scope!", $1);
+    Symbol * symbol = sy_variable($1, false, function);
+    if(!symbol) {
+      STENC_MEMORY_ERROR;
+      va_free(function);
       YYABORT;
     }
 
-    if(existing_function->argc != $3.count) {
-      yyerror("Unexpected argument count in call of function '%s'!", $1);
-      YYABORT;
-    }
+    $3->function_call->function = symbol;
+    $$ = $3;
+  }
+  ;
 
+argument_list:
+  argument_list COMMA expression {
+    $1->function_call->argv = g_ptr_array_add($1->function_call->argv, (gpointer) $3);
+    $$ = $1;
+  }
+  | expression {
     $$ = ast_node_alloc(NODE_FUNCTION_CALL);
     if(!$$) {
       STENC_MEMORY_ERROR;
       YYABORT;
     }
 
-    $$->function_call->function = existing_function;
-    $$->function_call->argv = $3.declarations;
-  }
-  ;
-
-argument_list:
-  argument_list COMMA expression {
-    $$.count = $1.count + 1;
-    $1.declarations = (ASTNode **) realloc($1.declarations, $$.count * sizeof(ASTNode *));
-    if(!$1.declarations) {
+    $$->function_call->argv = g_ptr_array_new();
+    if(!$$->function_call->argv) {
       STENC_MEMORY_ERROR;
+      ast_node_free($$);
       YYABORT;
     }
 
-    $1.declarations[$1.count] = $3;
-    $$.declarations = $1.declarations;
-  }
-  | expression {
-    $$.declarations = (ASTNode **) malloc(sizeof(ASTNode *));
-    if(!$$.declarations) {
-      STENC_MEMORY_ERROR;
-      YYABORT;
-    }
-
-    $$.count = 1;
-    $$.declarations[0] = $1;
+    $$->function_call->argv = g_ptr_array_add($$->function_call->argv, (gpointer) $1);
   }
   ;
 
 parameter_list:
-  parameter_list COMMA declaration_only {
-    $1->function_declaration->argc++;
-    $1->function_declaration->args = (ASTNode **) realloc($1->function_declaration->args, $1->function_declaration->argc * sizeof(ASTNode *));
-    if(!$1->function_declaration->args) {
+  parameter_list_non_void {
+    $$ = $1;
+  }
+  | {
+    $$ = ast_node_alloc(NODE_FUNCTION_DECLARATION);
+    if(!$$) {
       STENC_MEMORY_ERROR;
       YYABORT;
     }
+  }
+  ;
 
-    $1->function_declaration->args[$1->function_declaration->argc - 1] = $3;
+parameter_list_non_void:
+  parameter_list_non_void COMMA declaration_only {
+    $1->function_declaration->args = g_ptr_array_add($1->function_declaration->args, $3);
     $$ = $1;
   }
   | declaration_only {
@@ -206,70 +202,52 @@ parameter_list:
       YYABORT;
     }
 
-    $$->function_declaration->argc = 1;
-    $$->function_declaration->args = (ASTNode **) malloc(sizeof(ASTNode *));
+    $$->function_declaration->args = g_ptr_array_new();
     if(!$$->function_declaration->args) {
       STENC_MEMORY_ERROR;
       ast_node_free($$);
       YYABORT;
     }
 
-    $$->function_declaration->args[0] = $1;
-  }
-  | {
-    $$ = ast_node_alloc(NODE_FUNCTION_DECLARATION);
-    if(!$$) {
-      STENC_MEMORY_ERROR;
-      YYABORT;
-    }
-
-    $$->function_declaration->argc = 0;
-    $$->function_declaration->args = NULL;
+    $$->function_declaration->args = g_ptr_array_add($$->function_declaration->args, $1);
   }
   ;
 
 function_declaration:
-  INT IDENTIFIER LEFT_PARENTHESIS parameter_list RIGHT_PARENTHESIS scope {
-    $$ = $4;
-
-    // If the function has already been declared, raise a syntax error to prevent a redeclaration.
-    if(tos_lookup(table_of_symbols, $2)) {
-      yyerror("Redeclaration of '%s'!", $2);
-      ast_node_free($$);
-      YYABORT;
+  IDENTIFIER LEFT_PARENTHESIS parameter_list RIGHT_PARENTHESIS scope {
+    for(guint i = 0; i < $4->function_declaration->args->len; i++) {
+      Symbol * arg = g_ptr_array_index($4->function_declaration->args, i);
+      arg->scopes = g_array_append_val(arg->scopes, scope);
     }
 
+    scope++;
+
     // Create value object for the identifier.
-    Value * value = va_alloc(VALUE_FUNCTION);
-    if(!value) {
+    Value * function = va_alloc(VALUE_FUNCTION);
+    if(!function) {
       STENC_MEMORY_ERROR;
-      ast_node_free($$);
       YYABORT;
     }
 
     // Create and add new symbol to the table of symbols.
-    Symbol * new_identifier = sy_variable($2, false, value);
-    if(!new_identifier) {
+    Symbol * symbol = sy_variable($2, false, function);
+    if(!symbol) {
       STENC_MEMORY_ERROR;
-      va_free(value);
-      ast_node_free($$);
+      va_free(function);
       YYABORT;
     }
     
-    table_of_symbols = tos_append(table_of_symbols, new_identifier);
+    table_of_symbols = tos_append(table_of_symbols, symbol);
     if(!table_of_symbols) {
       STENC_MEMORY_ERROR;
-      sy_free(new_identifier);
-      ast_node_free($$);
+      sy_free(symbol);
       YYABORT;
     }
 
-    //$6->scope->name =
-    $$->function_declaration->function = new_identifier;
-    $$->function_declaration->returns = NULL;
-    $$->function_declaration->argc = 0;
-    $$->function_declaration->args = NULL;
-    $$->function_declaration->body = $6;
+    $4->function_declaration->function = symbol;
+    $4->function_declaration->body = $6;
+
+    $$ = $4;
   }
   ;
 
@@ -281,17 +259,8 @@ scope:
 
 statement_list:
   statement COLON statement_list { // Statements (except control structures and function declarations) are separated by a colon.
-    $3->scope->count++;
-    $3->scope->statements = (ASTNode **) realloc($3->scope->statements, $3->scope->count * sizeof(ASTNode *));
-    if(!$3->scope->statements) {
-      STENC_MEMORY_ERROR;
-      YYABORT;
-    }
-
-    printf("Pridávam statement (mám: %lu)\n", $3->scope->count);
-
-    $3->scope->statements[$3->scope->count - 1] = $1;
-    $$ = $3;
+    $2->scope->statements = g_ptr_array_add($2->scope->statements, $1);
+    $$ = $2;
   }
   | statement COLON {
     $$ = ast_node_alloc(NODE_SCOPE);
@@ -300,25 +269,17 @@ statement_list:
       YYABORT;
     }
 
-    $$->scope->count = 1;
-    $$->scope->statements = (ASTNode **) malloc(sizeof(ASTNode *));
+    $$->scope->statements = g_ptr_array_new();
     if(!$$->scope->statements) {
       STENC_MEMORY_ERROR;
       ast_node_free($$);
       YYABORT;
     }
 
-    $$->scope->statements[0] = $1;
+    $$->scope->statements = g_ptr_array_add($$->scope->statements, $1);
   }
   | control_structure statement_list {
-    $2->scope->count++;
-    $2->scope->statements = (ASTNode **) realloc($2->scope->statements, $2->scope->count * sizeof(ASTNode *));
-    if(!$2->scope->statements) {
-      STENC_MEMORY_ERROR;
-      YYABORT;
-    }
-
-    $2->scope->statements[$2->scope->count - 1] = $1;
+    $2->scope->statements = g_ptr_array_add($2->scope->statements, $1);
     $$ = $2;
   }
   | control_structure {
@@ -328,15 +289,14 @@ statement_list:
       YYABORT;
     }
 
-    $$->scope->count = 1;
-    $$->scope->statements = (ASTNode **) malloc(sizeof(ASTNode *));
+    $$->scope->statements = g_ptr_array_new();
     if(!$$->scope->statements) {
       STENC_MEMORY_ERROR;
       ast_node_free($$);
       YYABORT;
     }
 
-    $$->scope->statements[0] = $1;
+    $$->scope->statements = g_ptr_array_add($$->scope->statements, $1);
   }
   ;
 
@@ -385,7 +345,12 @@ control_structure:
     $$->for_loop->incrementation = $7;
     $$->for_loop->statements = $9;
   }
-  | function_declaration {
+  | INT function_declaration {
+    $1->function_declaration->returns = RETURNS_INTEGER;
+    $$ = $1;
+  }
+  | VOID function_declaration {
+    $1->function_declaration->returns = RETURNS_VOID;
     $$ = $1;
   }
   ;
