@@ -8,7 +8,12 @@ Symbol * sy_alloc(void) {
   }
 
   table->identifier = NULL;
-  table->scope = NULL;
+  table->scopes = g_array_new(FALSE, FALSE, sizeof(int));
+  if(!table->scopes) {
+    free(table);
+    return NULL;
+  }
+
   table->is_constant = false;
   table->value = NULL;
 
@@ -82,8 +87,20 @@ Symbol * sy_label(const char * name) {
   return label;
 }
 
-bool sy_compare(const Symbol * __s1, const Symbol * __s2) {
-  return !strcmp(__s1->identifier, __s2->identifier) && !strcmp(__s1->scope, __s2->scope);
+bool sy_equal(const Symbol * __s1, const Symbol * __s2) {
+  if(__s1->scopes->len != __s2->scopes->len) {
+    return false;
+  }
+
+  bool same_scopes = true;
+  for(guint i = 0; i < __s1->scopes->len; i++) {
+    if(g_array_index(__s1->scopes, int, i) != g_array_index(__s1->scopes, int, i)) {
+      same_scopes = false;
+      break;
+    }
+  }
+
+  return !strcmp(__s1->identifier, __s2->identifier) && same_scopes;
 }
 
 void sy_print(const Symbol * symbol) {
@@ -128,6 +145,6 @@ void sy_free(Symbol * symbol) {
   }
 
   free(symbol->identifier);
-  free(symbol->scope);
+  g_array_free(symbol->scopes, FALSE);
   va_free(symbol->value);
 }
