@@ -15,6 +15,8 @@ int main(int argc, char ** argv) {
   yyin = fopen(argv[1], "r");
 
   yyparse();
+
+  ast_dump(AST);
   
   tos_free(table_of_symbols);
   ast_node_free(AST);
