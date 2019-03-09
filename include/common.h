@@ -10,7 +10,7 @@
 #include <limits.h>
 #include <math.h>
 
-#define STENC_MEMORY_ERROR fprintf(stderr, "[StenC] Internal error: Memory overflow!\n")
+#define STENC_MEMORY_ERROR fprintf(stderr, "[StenC] Internal error: Memory overflow! (%s, %d)\n", __FILE__, __LINE__);
 
 // The following messages are usually defined in the same file as the main function.
 
