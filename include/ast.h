@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
-#include <errno.h>
+#include <gmodule.h>
 
 #include "symbol.h"
 
@@ -45,18 +45,21 @@ typedef enum {
   NODE_SCOPE
 } ASTType;
 
+typedef enum {
+  RETURNS_VOID,
+  RETURNS_INTEGER
+} ReturnType;
+
 typedef struct s_node ASTNode;
 
 typedef struct {
-  ASTNode ** declarations;
-  size_t count; 
+  GPtrArray * symbols;
 } ASTDeclarationList;
 
 // Represents an array access (e. g. array[N][0]).
 typedef struct {
   Symbol * array;
-  size_t count;
-  ASTNode ** accessors;
+  GPtrArray * accessors;
 } ASTArrayAccess;
 
 // Represents a unary operation, either arithmetic or logic (e. g. '-1', '!var', etc.)
@@ -89,23 +92,20 @@ typedef struct {
 // Represents a function declaration
 typedef struct {
   Symbol * function;
-  ASTNode * returns;
-  ASTNode ** args;
-  size_t argc;
+  ReturnType * returns;
+  GPtrArray * args;
   ASTNode * body;
 } ASTFunctionDeclaration;
 
 // Represents a function call, of either user-defined or a built-in function ('printi' or 'printf')
 typedef struct {
-  ASTFunctionDeclaration * function;
-  ASTNode ** argv;
+  Symbol * function;
+  GPtrArray * argv;
 } ASTFunctionCall;
 
 // Represents a scope (e. g. scope of a function or even of an entire source file)
 typedef struct {
-  Symbol * name;
-  ASTNode ** statements;
-  size_t count;
+  GPtrArray * statements;
 } ASTScope;
 
 // Type definition of a general AST node
