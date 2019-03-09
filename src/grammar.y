@@ -15,10 +15,6 @@
   int integer;
   char * string;
   ASTNode * node;
-  struct {
-    ASTNode ** declarations;
-    size_t count;
-  } declarations;
 }
 
 %define parse.error verbose
@@ -28,8 +24,7 @@
 %token <integer> INTEGER
 
 %type <integer> integer_constant
-%type <node> array_accessor function_call function_declaration parameter_list scope statement_list control_structure statement declaration declaration_only assignment assignment_array assignment_variable expression declaration_list unary_increment_or_decrement initializer integer_constant_list
-%type <declarations> argument_list
+%type <node> array_accessor function_call function_declaration parameter_list scope statement_list control_structure statement declaration declaration_only assignment assignment_array assignment_variable expression declaration_list unary_increment_or_decrement initializer integer_constant_list argument_list
 
 %left PLUS MINUS
 %left STAR SLASH DOLLAR
@@ -131,6 +126,49 @@ array_accessor:
     }
 
     $$->access->accessors = g_ptr_array_add($$->access->accessors, (gpointer) $2);
+  }
+  ;
+
+array_accessor_constant:
+	array_accessor LEFT_BRACKET integer_constant RIGHT_BRACKET {
+    $1->symbol->value->array.sizes = g_array_append_val($1->symbol->value->array.sizes, $3);
+    $1->symbol->value->array.dimensions++;
+    $$ = $1;
+  }
+	| LEFT_BRACKET integer_constant RIGHT_BRACKET {
+    Value * array = va_alloc(VALUE_ARRAY);
+    if(!array) {
+      STENC_MEMORY_ERROR;
+      YYABORT;
+    }
+
+    array->array.sizes = g_array_new(FALSE, TRUE, sizeof(int));
+    if(!array->sizes) {
+      STENC_MEMORY_ERROR;
+      va_free(array);
+      YYABORT;
+    }
+
+    array->array.sizes = g_array_append_val(array->array.sizes, $1);
+    array->array.dimensions = 1;
+
+    Symbol * symbol = sy_alloc();
+    if(!symbol) {
+      STENC_MEMORY_ERROR;
+      va_free(array);
+      YYABORT;
+    }
+
+    symbol->value = array;
+
+    $$ = ast_node_alloc(NODE_SYMBOL_DECLARATION);
+    if(!$$) {
+      STENC_MEMORY_ERROR;
+      sy_free(symbol);
+      YYABORT;
+    }
+
+    $$->symbol = symbol;
   }
   ;
 
@@ -362,85 +400,8 @@ statement:
   | INT declaration_list { // Declaration of a variable or an array
     $$ = $2;
   }
-  | STENCIL IDENTIFIER LEFT_BRACE INTEGER COMMA INTEGER RIGHT_BRACE EQUAL initializer { // Declaration of a stencil
-    // Number of dimensions of a stencil should be a positive non-null integer
-    if($6 < 1) {
-      yyerror("Number of dimensions of a stencil should be a positive non-null constant, got '%d'!", $6);
-      YYABORT;
-    }
-
-    $$ = ast_node_alloc(NODE_SYMBOL_DECLARATION);
-    if(!$$) {
-      STENC_MEMORY_ERROR;
-      YYABORT;
-    }
-
-    // If the identifier has already been declared, raise a syntax error to prevent a redeclaration.
-    if(tos_lookup(table_of_symbols, $2)) {
-      yyerror("Redeclaration of '%s'!", $2);
-      ast_node_free($$);
-      YYABORT;
-    }
-
-    // Create value object for the identifier.
-    Value * value = va_alloc(VALUE_STENCIL);
-    if(!value) {
-      STENC_MEMORY_ERROR;
-      ast_node_free($$);
-      YYABORT;
-    }
-
-    // Initialize the stencil value
-    value->array.dimensions = $6;
-    value->array.sizes = (size_t *) malloc(value->array.dimensions * sizeof(size_t));
-    if(!value->array.sizes) {
-      STENC_MEMORY_ERROR;
-      va_free(value);
-      ast_node_free($$);
-      YYABORT;
-    }
-
-    value->array.values = (int *) malloc(value->array.dimensions * sizeof(int));
-    if(!value->array.values) {
-      STENC_MEMORY_ERROR;
-      va_free(value);
-      ast_node_free($$);
-      YYABORT;
-    }
-
-    size_t one_size = 1 + $4 * 2, // Size of a stencil is computed based on its neighborhood's size (e. g. a 2D stencil with a neighborhood of 1 will be of size 3x3).
-           total_size = 1;
-    for(size_t i = 0; i < value->array.dimensions; i++) {
-      value->array.sizes[i] = one_size;
-      total_size *= one_size;
-    }
-
-    if(total_size != $9.count) {
-      yyerror("Unexpected element count in initializer of array '%s'!", $2);
-      va_free(value);
-      ast_node_free($$);
-      YYABORT;
-    }
-
-    for(size_t i = 0; i < total_size; i++) {
-      value->array.values[i] = $9.initializers[i];
-    }
-
-    // Create and add new symbol to the table of symbols.
-    Symbol * new_identifier = sy_variable($2, false, value);
-    if(!new_identifier) {
-      STENC_MEMORY_ERROR;
-      ast_node_free($$);
-      YYABORT;
-    }
-    
-    table_of_symbols = tos_append(table_of_symbols, new_identifier);
-    if(!table_of_symbols) {
-      STENC_MEMORY_ERROR;
-      sy_free(new_identifier);
-      ast_node_free($$);
-      YYABORT;
-    }
+  | STENCIL stencil_declaration_list {
+    $$ = $2;
   }
   | function_call { // Function call
     $$ = $1;
@@ -450,31 +411,98 @@ statement:
   }
   ;
 
-declaration_list:
-  declaration_list COMMA declaration {
-    $1->declaration_list->count++;
-    $1->declaration_list->declarations = (ASTNode **) realloc($1->declaration_list->declarations, $1->declaration_list->count * sizeof(ASTNode *));
-    if(!$1->declaration_list->declarations) {
+stencil_declaration_list:
+  stencil_declaration_list COMMA stencil_declaration {
+    $1->declaration_list->declarations = g_ptr_array_add($1->declaration_list->declarations, (gpointer) $3);
+    $$ = $1;
+  }
+  | stencil_declaration {
+    $$ = ast_node_alloc(NODE_DECLARATION_LIST);
+    if(!$$) {
       STENC_MEMORY_ERROR;
       YYABORT;
     }
 
+    $$->declaration_list->declarations = g_ptr_array_new();
+    if(!$$->declaration_list->declarations) {
+      STENC_MEMORY_ERROR;
+      ast_node_free($$);
+      YYABORT;
+    }
+
+    $$->declaration_list->declarations = g_ptr_array_add($$->declaration_list->declarations, (gpointer) $1);
+  }
+  ;
+
+stencil_declaration:
+  IDENTIFIER LEFT_BRACE INTEGER COMMA INTEGER RIGHT_BRACE EQUAL initializer { // Declaration of a stencil
+    // Number of dimensions of a stencil should be a positive non-null integer
+    if($5 < 1) {
+      yyerror("Number of dimensions of a stencil should be a positive non-null constant, got '%d'!", $6);
+      YYABORT;
+    }
+
+    $8->symbol->value->type = VALUE_STENCIL;
+
+    // Initialize the stencil value
+    $8->symbol->value->array.dimensions = $6;
+    $8->symbol->value->array.sizes = g_array_new(FALSE, TRUE, sizeof(size_t));
+    if(!$8->symbol->value->array.sizes) {
+      STENC_MEMORY_ERROR;
+      YYABORT;
+    }
+
+    $8->symbol->value->array.values = g_array_new(FALSE, TRUE, sizeof(int));
+    if(!$8->symbol->value->array.values) {
+      STENC_MEMORY_ERROR;
+      YYABORT;
+    }
+
+    size_t one_size = 1 + $4 * 2, // Size of a stencil is computed based on its neighborhood's size (e. g. a 2D stencil with a neighborhood of 1 will be of size 3x3).
+           total_size = 1;
+    for(size_t i = 0; i < $8->symbol->value->array.dimensions; i++) {
+      $8->symbol->value->array.sizes = g_array_append_val($8->symbol->value->array.sizes, one_size);
+      total_size *= one_size;
+    }
+
+    if(total_size != $8->symbol->value->array.values->len) {
+      yyerror("Unexpected element count in initializer of array '%s'!", $2);
+      YYABORT;
+    }
+
+    $8->symbol->identifier = strdup($1);
+    if(!$8->symbol->identifier) {
+      STENC_MEMORY_ERROR;
+      YYABORT;
+    }
+    
+    table_of_symbols = tos_append(table_of_symbols, $8->symbol);
+    if(!table_of_symbols) {
+      STENC_MEMORY_ERROR;
+      YYABORT;
+    }
+
+    $$ = $8;
+  }
+  ;
+
+declaration_list:
+  declaration_list COMMA declaration {
     if($3->type == NODE_BINARY) {
       $3->binary->LHS->type = NODE_SYMBOL_DECLARATION;
     }
 
-    $1->declaration_list->declarations[$1->declaration_list->count] = $3;
+    $1->declaration_list->declarations = g_ptr_array_add($1->declaration_list->declarations, (gpointer) $3);
     $$ = $1;
   }
   | declaration {
     $$ = ast_node_alloc(NODE_DECLARATION_LIST);
     if(!$$) {
-      perror("Do piče");
       STENC_MEMORY_ERROR;
       YYABORT;
     }
 
-    $$->declaration_list->declarations = (ASTNode **) malloc(sizeof(ASTNode *));
+    $$->declaration_list->declarations = g_ptr_array_new();
     if(!$$->declaration_list->declarations) {
       STENC_MEMORY_ERROR;
       ast_node_free($$);
@@ -485,8 +513,7 @@ declaration_list:
       $1->binary->LHS->type = NODE_SYMBOL_DECLARATION;
     }
 
-    $$->declaration_list->count = 1;
-    $$->declaration_list->declarations[0] = $1;
+    $$->declaration_list->declarations = g_ptr_array_add($$->declaration_list->declarations, (gpointer) $1);
   }
   ;
 
@@ -495,13 +522,6 @@ declaration_only:
     $$ = ast_node_alloc(NODE_SYMBOL_DECLARATION);
     if(!$$) {
       STENC_MEMORY_ERROR;
-      YYABORT;
-    }
-
-    // If the identifier has already been declared, raise a syntax error to prevent a redeclaration.
-    if(tos_lookup(table_of_symbols, $1)) {
-      yyerror("Redeclaration of '%s'!", $1);
-      ast_node_free($$);
       YYABORT;
     }
 
@@ -529,69 +549,20 @@ declaration_only:
       YYABORT;
     }
   }
-  | IDENTIFIER array_accessor { // New array identifier declaration (e. g. 'tab[10][10]')
-    $$ = ast_node_alloc(NODE_SYMBOL_DECLARATION);
-    if(!$$) {
+  | IDENTIFIER array_accessor_constant { // New array identifier declaration (e. g. 'tab[10][10]')
+    $1->symbol->identifier = strdup($1);
+    if(!$1->symbol->identifier) {
       STENC_MEMORY_ERROR;
       YYABORT;
     }
 
-    // If the identifier has already been declared, raise a syntax error to prevent a redeclaration.
-    if(tos_lookup(table_of_symbols, $1)) {
-      yyerror("Redeclaration of '%s'!", $1);
-      ast_node_free($$);
-      YYABORT;
-    }
-
-    // Create value object for the identifier.
-    Value * value = va_alloc(VALUE_ARRAY);
-    if(!value) {
-      STENC_MEMORY_ERROR;
-      ast_node_free($$);
-      YYABORT;
-    }
-
-    value->array.dimensions = $2->access->count;
-    value->array.sizes = (size_t *) malloc(value->array.dimensions * sizeof(size_t));
-    if(!value->array.sizes) {
-      STENC_MEMORY_ERROR;
-      va_free(value);
-      ast_node_free($$);
-      YYABORT;
-    }
-
-    
-    // Gather array dimension sizes.
-    for(size_t i = 0; i < value->array.dimensions; i++) {
-      if($2->access->accessors[i]->type == NODE_SYMBOL &&
-         $2->access->accessors[i]->symbol->is_constant &&
-         $2->access->accessors[i]->symbol->value->type == VALUE_INTEGER &&
-         $2->access->accessors[i]->symbol->value->integer > 0) {
-        value->array.sizes[i] = (size_t) $2->access->accessors[i]->symbol->value->integer;
-      } else {
-        yyerror("Expected dimension size to be a non-null positive integer literal in declaration of array '%s'!", $1);
-        va_free(value);
-        ast_node_free($$);
-        YYABORT;
-      }
-    }
-
-    // Create and add new symbol to the table of symbols.
-    Symbol * new_identifier = sy_variable($1, false, value);
-    if(!new_identifier) {
-      STENC_MEMORY_ERROR;
-      va_free(value);
-      ast_node_free($$);
-      YYABORT;
-    }
-
-    table_of_symbols = tos_append(table_of_symbols, new_identifier);
+    table_of_symbols = tos_append(table_of_symbols, $1->symbol);
     if(!table_of_symbols) {
       STENC_MEMORY_ERROR;
-      sy_free(new_identifier);
-      ast_node_free($$);
       YYABORT;
     }
+
+    $$ = $1;
   }
   ;
 
@@ -602,82 +573,36 @@ declaration:
   | declaration_only {
     $$ = $1;
   }
-  | IDENTIFIER array_accessor EQUAL initializer { // New array identifier declaration with immediate definition using an initializer list (e. g. 'tab[3] = {1, 2, 3}')
-    $$ = ast_node_alloc(NODE_SYMBOL_DECLARATION);
-    if(!$$) {
-      STENC_MEMORY_ERROR;
-      YYABORT;
+  | IDENTIFIER array_accessor_constant EQUAL initializer { // New array identifier declaration with immediate definition using an initializer list (e. g. 'tab[3] = {1, 2, 3}')
+    size_t expected_value_count = 1;
+    for(guint i = 0; i < $2->symbol->value->array.sizes->len; i++) {
+      expected_value_count *= g_array_index($2->symbol->value->array.sizes, size_t, i);
     }
 
-    // If the identifier has already been declared, raise a syntax error to prevent a redeclaration.
-    if(tos_lookup(table_of_symbols, $1)) {
-      yyerror("Redeclaration of '%s'!", $1);
-      ast_node_free($$);
-      YYABORT;
-    }
-
-    // Create value object for the identifier.
-    Value * value = va_alloc(VALUE_ARRAY);
-    if(!value) {
-      STENC_MEMORY_ERROR;
-      ast_node_free($$);
-      YYABORT;
-    }
-
-    value->array.dimensions = $2->access->count;
-    value->array.sizes = (size_t *) malloc(value->array.dimensions * sizeof(size_t));
-    if(!value->array.sizes) {
-      STENC_MEMORY_ERROR;
-      va_free(value);
-      ast_node_free($$);
-      YYABORT;
-    }
-
-    
-    // Gather array dimension sizes.
-    size_t values_size = 1;
-    for(size_t i = 0; i < value->array.dimensions; i++) {
-      if($2->access->accessors[i]->type == NODE_SYMBOL &&
-         $2->access->accessors[i]->symbol->is_constant &&
-         $2->access->accessors[i]->symbol->value->type == VALUE_INTEGER &&
-         $2->access->accessors[i]->symbol->value->integer > 0) {
-        value->array.sizes[i] = (size_t) $2->access->accessors[i]->symbol->value->integer;
-        values_size *= value->array.sizes[i];
-      } else {
-        yyerror("Expected dimension size to be a non-null positive integer literal in declaration of array '%s'!", $1);
-        va_free(value);
-        ast_node_free($$);
-        YYABORT;
-      }
-    }
-
-    if(values_size != $4.count) {
+    if(expected_value_count != $4->symbol->value->array.values->len) {
       yyerror("Unexpected element count in initializer of array '%s'!", $1);
-      va_free(value);
-      ast_node_free($$);
       YYABORT;
     }
 
-    value->array.values = (int *) malloc(values_size * sizeof(int));
-    if(!value->array.values) {
+    $2->symbol->value->array.values = g_array_new(FALSE, TRUE, sizeof(int));
+    if(!$2->symbol->value->array.values) {
       STENC_MEMORY_ERROR;
-      va_free(value);
-      ast_node_free($$);
       YYABORT;
     }
 
-    for(size_t i = 0; i < values_size; i++) {
-      value->array.values[i] = $4.initializers[i];
+    for(guint i = 0; i < $4->symbol->value->array.values->len; i++) {
+      $2->symbol->value->array.values = g_array_append_val($2->symbol->value->array.values, g_array_index($4->symbol->value->array.values, int, i));
     }
 
     // Create and add new symbol to the table of symbols.
-    Symbol * new_identifier = sy_variable($1, false, value);
-    if(!new_identifier) {
+    $2->symbol->identifier = strdup($1);
+    if(!$2->symbol->identifier) {
       STENC_MEMORY_ERROR;
-      va_free(value);
-      ast_node_free($$);
       YYABORT;
     }
+
+    ast_node_free($4);
+    $$ = $2;
   }
   ;
 
@@ -744,20 +669,26 @@ assignment_variable:
 
 assignment_array:  
   IDENTIFIER array_accessor EQUAL expression {
+    Value * array = va_alloc(VALUE_ARRAY);
+    if(!array) {
+      STENC_MEMORY_ERROR;
+      YYABORT;
+    }
+
+    Symbol * symbol = sy_variable($1, false, array);
+    if(!symbol) {
+      STENC_MEMORY_ERROR;
+      va_free(array);
+      YYABORT;
+    }
+
+    $2->access->array = symbol;
+
     $$ = ast_node_alloc(NODE_BINARY);
     if(!$$) {
       STENC_MEMORY_ERROR;
       YYABORT;
     }
-
-    // Check whether the destination array has been declared.
-    Symbol * existing = NULL;
-    if(!(existing = tos_lookup(table_of_symbols, $1))) {
-      yyerror("Undeclared identifier '%s'!", $1);
-      YYABORT;
-    }
-
-    $2->access->array = existing;
 
     $$->binary->operation = BO_ASSIGNMENT;
     $$->binary->LHS = $2;
@@ -976,36 +907,50 @@ expression:
     $$ = $1;
   }
   | IDENTIFIER array_accessor { // Array item reference (e. g. 'tab[0][i + 1]')
-    // Check if the array identified by the parsed identifier has been defined.
-    Symbol * existing = NULL;
-    if((existing = tos_lookup(table_of_symbols, $1))) {
-      // Create new symbol AST node.
-      $$ = $2;
-      $$->access->array = existing;
-    } else {
-      // Otherwise, abort parsing and raise a syntax error.
-      yyerror("Undefined variable '%s'!", $1);
-      ast_node_free($$);
+    Value * array = va_alloc(VALUE_ARRAY);
+    if(!array) {
+      STENC_MEMORY_ERROR;
       YYABORT;
     }
+
+    Symbol * symbol = sy_variable($1, false, array);
+    if(!symbol) {
+      STENC_MEMORY_ERROR;
+      va_free(array);
+      YYABORT;
+    }
+
+    $2->access->array = symbol;
+    $$ = $2;
   }
   | IDENTIFIER { // Variable reference (e. g. 'foo')
-    // Check if the variable identified by the parsed identifier has been defined.
-    Symbol * existing = NULL;
-    if((existing = tos_lookup(table_of_symbols, $1))) {
-      // Create new symbol AST node.
-      $$ = ast_node_alloc(NODE_SYMBOL);
-      if(!$$) {
-        STENC_MEMORY_ERROR;
-        YYABORT;
-      }
-
-      $$->symbol = existing;
-    } else {
-      // Otherwise, abort parsing and raise a syntax error.
-      yyerror("Undefined variable '%s'!", $1);
+    Value * integer = va_alloc(VALUE_INTEGER);
+    if(!integer) {
+      STENC_MEMORY_ERROR;
       YYABORT;
     }
+
+    Symbol * symbol = sy_variable($1, false, integer);
+    if(!symbol) {
+      STENC_MEMORY_ERROR;
+      va_free(integer);
+      YYABORT;
+    }
+
+    table_of_symbols = tos_append(table_of_symbols, symbol);
+    if(!table_of_symbols) {
+      STENC_MEMORY_ERROR;
+      sy_free(symbol);
+      YYABORT;
+    }
+
+    $$ = ast_node_alloc(NODE_SYMBOL);
+    if(!$$) {
+      STENC_MEMORY_ERROR;
+      YYABORT;
+    }
+
+    $$->symbol = symbol;
   }
   | INTEGER { // Integer literal (e. g. '12')
     // Create new symbol AST node.
