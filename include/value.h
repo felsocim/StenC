@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <gmodule.h>
 
 // Possible symbol value types
 typedef enum {
@@ -20,8 +21,8 @@ typedef struct {
     int integer;
     char * string;
     struct {
-      int * values;
-      size_t * sizes;
+      GArray * values,
+             * sizes;
       size_t dimensions;
     } array;
   };
