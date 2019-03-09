@@ -101,8 +101,12 @@ ASTNode * ast_node_alloc(ASTType type) {
     case NODE_SYMBOL_DECLARATION:
     case NODE_SYMBOL: // Identifiers are allocated in the table of symbols using associated functions.
     default: // Unknown AST node type detected
-      return node;
+      break;
   }
+
+  node->type = type;
+
+  return node;
 
 memerr:
   errno = ENOMEM;
@@ -295,6 +299,8 @@ void ast_dump_and_indent(const ASTNode * node, size_t indent, const char * begin
         ast_dump_and_indent(node->function_declaration->args[i], ++indent, node->function_declaration->returns ? "├─ Argument:" : "└─ Argument:");
       }
 
+      ast_dump_and_indent(node->function_declaration->body, ++indent, "├─ Body:");
+
       if(node->function_declaration->returns) {
         ast_dump_and_indent(node->function_declaration->returns, ++indent, "└─ Returns:");
       }
@@ -311,7 +317,7 @@ void ast_dump_and_indent(const ASTNode * node, size_t indent, const char * begin
       }
       break;
     case NODE_SCOPE:
-      printf("%s Scop <%s>\n", beginning, node->scope->name->identifier);
+      printf("%s Scop <stmts = %lu>\n", beginning, node->scope->count/*, node->scope->name->identifier*/);
       for(size_t i = 0; i < node->scope->count; i++) {
         ast_dump_and_indent(node->scope->statements[i], ++indent, (i < node->scope->count - 1 ? "├─" : "└─"));
       }
