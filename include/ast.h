@@ -26,11 +26,13 @@ typedef enum {
   BO_LESS_OR_EQUAL,
   BO_GREATER_OR_EQUAL,
   BO_GREATER,
+  BO_NOTEQUAL,
   BO_EQUAL
 } Operator;
 
 // Enumeration of possible AST node types
 typedef enum {
+  NODE_RETURN,
   NODE_SYMBOL_DECLARATION,
   NODE_SYMBOL,
   NODE_DECLARATION_LIST,
@@ -51,6 +53,11 @@ typedef enum {
 } ReturnType;
 
 typedef struct s_node ASTNode;
+
+typedef struct {
+  ReturnType type;
+  ASTNode * returns;
+} ASTReturn;
 
 typedef struct {
   GPtrArray * symbols;
@@ -92,7 +99,7 @@ typedef struct {
 // Represents a function declaration
 typedef struct {
   Symbol * function;
-  ReturnType * returns;
+  ReturnType returns;
   GPtrArray * args;
   ASTNode * body;
 } ASTFunctionDeclaration;
@@ -105,6 +112,7 @@ typedef struct {
 
 // Represents a scope (e. g. scope of a function or even of an entire source file)
 typedef struct {
+  size_t identifier;
   GPtrArray * statements;
 } ASTScope;
 
@@ -112,6 +120,7 @@ typedef struct {
 struct s_node {
   union {
     Symbol * symbol;
+    ASTReturn * return_statement;
     ASTDeclarationList * declaration_list;
     ASTArrayAccess * access;
     ASTUnary * unary;
@@ -130,6 +139,7 @@ const char * operator_to_string(Operator);
 ASTNode * ast_node_alloc(ASTType);
 void ast_node_free(ASTNode *);
 void ast_dump(const ASTNode *);
+bool is_node_integer_constant(const ASTNode *);
 
 ASTFunctionDeclaration * ast_find_function_declaration(const ASTNode *, const Symbol *);
 
