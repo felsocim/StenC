@@ -1,8 +1,8 @@
 CC = gcc
 LEX = flex
-YACC = bison -d
-CFLAGS = -g -Wall -std=c11
-LDFLAGS = -lfl -ly -lm
+YACC = bison -v -d
+CFLAGS = -g -Wall -std=c11 `pkg-config --cflags glib-2.0`
+LDFLAGS = `pkg-config --libs glib-2.0` -lfl -ly -lm
 INCLUDES = -I./include
 
 all: compiler include/main.h
