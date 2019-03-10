@@ -20,7 +20,7 @@ void usage(const char * arg_0, int exit_code) {
 }
 
 size_t intlen(int number) {
-	if(number < 10 || number > -9) {
+	if(number < 10 && number > -9) {
 		return 1;
 	}
 
