@@ -2,7 +2,7 @@
   #include <stdarg.h>
   #include "../include/main.h"
 
-  static int scope = 0;
+  static size_t scope = 0;
 
   int yylex();
   void yyerror(const char * __format, ...) {
@@ -17,22 +17,23 @@
   ASTNode * node;
 }
 
-%define parse.error verbose
-
-%token MAIN RETURN INT STENCIL IF ELSE WHILE FOR PRINTI PRINTF LESS LESS_OR_EQUAL GREATER GREATER_OR_EQUAL NOT AND OR EQUALEQUAL PLUS MINUS STAR SLASH DOLLAR EQUAL LEFT_PARENTHESIS RIGHT_PARENTHESIS LEFT_BRACKET RIGHT_BRACKET LEFT_BRACE RIGHT_BRACE COMMA COLON MINUSMINUS PLUSPLUS VOID
+%token MAIN RETURN INT STENCIL IF ELSE WHILE FOR PRINTI PRINTF LESS LESS_OR_EQUAL GREATER GREATER_OR_EQUAL NOT AND OR NOTEQUAL EQUALEQUAL PLUS MINUS STAR SLASH DOLLAR EQUAL LEFT_PARENTHESIS RIGHT_PARENTHESIS LEFT_BRACKET RIGHT_BRACKET LEFT_BRACE RIGHT_BRACE COMMA COLON MINUSMINUS PLUSPLUS VOID
 %token <string> IDENTIFIER STRING
 %token <integer> INTEGER
 
-%type <integer> integer_constant
-%type <node> array_accessor function_call function_declaration parameter_list scope statement_list control_structure statement declaration declaration_only assignment assignment_array assignment_variable expression declaration_list unary_increment_or_decrement initializer integer_constant_list argument_list
+%type <node> array_accessor function_call function_declaration parameter_list scope statement_list control_structure statement declaration declaration_only assignment assignment_array assignment_variable expression declaration_list unary_increment_or_decrement initializer integer_constant_list argument_list array_accessor_constant parameter_list_non_void stencil_declaration stencil_declaration_list
 
-%left PLUS MINUS
-%left STAR SLASH DOLLAR
-%nonassoc UMINUS UINCREMENT UDECREMENT
-%left LEFT_PARENTHESIS
-%left LESS LESS_OR_EQUAL GREATER GREATER_OR_EQUAL OR
+
+%left OR
 %left AND
-%nonassoc UNOT
+%left EQUALEQUAL NOTEQUAL
+%left LESS LESS_OR_EQUAL GREATER GREATER_OR_EQUAL
+%left PLUS MINUS
+%left STAR SLASH
+%left DOLLAR
+%right UMINUS UNOT UINCREMENT UDECREMENT
+%left MINUSMINUS PLUSPLUS
+%left LEFT_PARENTHESIS
 %start module
 
 %%
@@ -45,21 +46,26 @@ module:
   ;
 
 initializer:
-  integer_constant {
+  expression {
+    if(!is_node_integer_constant($1)) {
+      yyerror("Non-constant expression in initializer list!");
+      YYABORT;
+    }
+
     Value * array = va_alloc(VALUE_ARRAY);
     if(!array) {
       STENC_MEMORY_ERROR;
       YYABORT;
     }
 
-    array->values = g_array_new(FALSE, FALSE, sizeof(int));
-    if(!array->values) {
+    array->array.values = g_array_new(FALSE, FALSE, sizeof(int));
+    if(!array->array.values) {
       STENC_MEMORY_ERROR;
       va_free(array);
       YYABORT;
     }
 
-    array->values = g_array_append_val(array->values, $1);
+    array->array.values = g_array_append_val(array->array.values, $1->symbol->value->integer);
 
     Symbol * symbol = sy_alloc();
     if(!symbol) {
@@ -89,7 +95,7 @@ initializer:
 
 integer_constant_list:
   integer_constant_list COMMA initializer {
-    $1->symbol->value->array->values = g_array_append_vals($1->symbol->value->array->values, $3->symbol->value->array->values, $3->symbol->value->array->values->len);
+    $1->symbol->value->array.values = g_array_append_vals($1->symbol->value->array.values, $3->symbol->value->array.values, $3->symbol->value->array.values->len);
     $$ = $1;
   }
   | initializer {
@@ -97,18 +103,9 @@ integer_constant_list:
   }
   ;
 
-integer_constant:
-  MINUS INTEGER {
-    $$ = -$2;
-  }
-  | INTEGER {
-    $$ = $1;
-  }
-  ;
-
 array_accessor:
 	array_accessor LEFT_BRACKET expression RIGHT_BRACKET {
-    $1->access->accessors = g_ptr_array_add($1->access->accessors, (gpointer) $3);
+    g_ptr_array_add($1->access->accessors, (gpointer) $3);
     $$ = $1;
   }
 	| LEFT_BRACKET expression RIGHT_BRACKET {
@@ -125,17 +122,17 @@ array_accessor:
       YYABORT;
     }
 
-    $$->access->accessors = g_ptr_array_add($$->access->accessors, (gpointer) $2);
+    g_ptr_array_add($$->access->accessors, (gpointer) $2);
   }
   ;
 
 array_accessor_constant:
-	array_accessor LEFT_BRACKET integer_constant RIGHT_BRACKET {
+	array_accessor LEFT_BRACKET INTEGER RIGHT_BRACKET {
     $1->symbol->value->array.sizes = g_array_append_val($1->symbol->value->array.sizes, $3);
     $1->symbol->value->array.dimensions++;
     $$ = $1;
   }
-	| LEFT_BRACKET integer_constant RIGHT_BRACKET {
+	| LEFT_BRACKET INTEGER RIGHT_BRACKET {
     Value * array = va_alloc(VALUE_ARRAY);
     if(!array) {
       STENC_MEMORY_ERROR;
@@ -143,13 +140,13 @@ array_accessor_constant:
     }
 
     array->array.sizes = g_array_new(FALSE, TRUE, sizeof(int));
-    if(!array->sizes) {
+    if(!array->array.sizes) {
       STENC_MEMORY_ERROR;
       va_free(array);
       YYABORT;
     }
 
-    array->array.sizes = g_array_append_val(array->array.sizes, $1);
+    array->array.sizes = g_array_append_val(array->array.sizes, $2);
     array->array.dimensions = 1;
 
     Symbol * symbol = sy_alloc();
@@ -194,7 +191,7 @@ function_call:
 
 argument_list:
   argument_list COMMA expression {
-    $1->function_call->argv = g_ptr_array_add($1->function_call->argv, (gpointer) $3);
+    g_ptr_array_add($1->function_call->argv, (gpointer) $3);
     $$ = $1;
   }
   | expression {
@@ -211,7 +208,58 @@ argument_list:
       YYABORT;
     }
 
-    $$->function_call->argv = g_ptr_array_add($$->function_call->argv, (gpointer) $1);
+    g_ptr_array_add($$->function_call->argv, (gpointer) $1);
+  }
+  | STRING {
+    $$ = ast_node_alloc(NODE_FUNCTION_CALL);
+    if(!$$) {
+      STENC_MEMORY_ERROR;
+      YYABORT;
+    }
+
+    Value * string = va_alloc(VALUE_STRING);
+    if(!string) {
+      STENC_MEMORY_ERROR;
+      ast_node_free($$);
+      YYABORT;
+    }
+
+    string->string = strdup($1);
+
+    Symbol * symbol = sy_temporary(true, string);
+    if(!symbol) {
+      STENC_MEMORY_ERROR;
+      ast_node_free($$);
+      va_free(string);
+      YYABORT;
+    }
+
+    table_of_symbols = tos_append(table_of_symbols, symbol);
+    if(!table_of_symbols) {
+      STENC_MEMORY_ERROR;
+      ast_node_free($$);
+      sy_free(symbol);
+      YYABORT;
+    }
+
+    ASTNode * argument = ast_node_alloc(NODE_SYMBOL);
+    if(!argument) {
+      STENC_MEMORY_ERROR;
+      ast_node_free($$);
+      sy_free(symbol);
+      YYABORT;
+    }
+
+    argument->symbol = symbol;
+
+    $$->function_call->argv = g_ptr_array_new();
+    if(!$$->function_call->argv) {
+      STENC_MEMORY_ERROR;
+      ast_node_free($$);
+      YYABORT;
+    }
+
+    g_ptr_array_add($$->function_call->argv, (gpointer) argument);
   }
   ;
 
@@ -230,7 +278,7 @@ parameter_list:
 
 parameter_list_non_void:
   parameter_list_non_void COMMA declaration_only {
-    $1->function_declaration->args = g_ptr_array_add($1->function_declaration->args, $3);
+    g_ptr_array_add($1->function_declaration->args, $3);
     $$ = $1;
   }
   | declaration_only {
@@ -247,17 +295,20 @@ parameter_list_non_void:
       YYABORT;
     }
 
-    $$->function_declaration->args = g_ptr_array_add($$->function_declaration->args, $1);
+    g_ptr_array_add($$->function_declaration->args, $1);
   }
   ;
 
 function_declaration:
   IDENTIFIER LEFT_PARENTHESIS parameter_list RIGHT_PARENTHESIS scope {
-    for(guint i = 0; i < $4->function_declaration->args->len; i++) {
-      Symbol * arg = g_ptr_array_index($4->function_declaration->args, i);
-      arg->scopes = g_array_append_val(arg->scopes, scope);
+    if($3->function_declaration->args) {
+      for(guint i = 0; i < $3->function_declaration->args->len; i++) {
+        Symbol * arg = g_ptr_array_index($3->function_declaration->args, i);
+        arg->scopes = g_array_append_val(arg->scopes, scope);
+      }
     }
 
+    $5->scope->identifier = scope;
     scope++;
 
     // Create value object for the identifier.
@@ -268,7 +319,7 @@ function_declaration:
     }
 
     // Create and add new symbol to the table of symbols.
-    Symbol * symbol = sy_variable($2, false, function);
+    Symbol * symbol = sy_variable($1, false, function);
     if(!symbol) {
       STENC_MEMORY_ERROR;
       va_free(function);
@@ -282,10 +333,10 @@ function_declaration:
       YYABORT;
     }
 
-    $4->function_declaration->function = symbol;
-    $4->function_declaration->body = $6;
+    $3->function_declaration->function = symbol;
+    $3->function_declaration->body = $5;
 
-    $$ = $4;
+    $$ = $3;
   }
   ;
 
@@ -296,16 +347,19 @@ scope:
   ;
 
 statement_list:
-  statement COLON statement_list { // Statements (except control structures and function declarations) are separated by a colon.
-    $2->scope->statements = g_ptr_array_add($2->scope->statements, $1);
-    $$ = $2;
+  statement_list statement { // Statements (except control structures and function declarations) are separated by a colon.
+    g_ptr_array_add($1->scope->statements, $2);
+    $$ = $1;
   }
-  | statement COLON {
+  | statement {
     $$ = ast_node_alloc(NODE_SCOPE);
     if(!$$) {
       STENC_MEMORY_ERROR;
       YYABORT;
     }
+
+    $$->scope->identifier = scope;
+    scope++;
 
     $$->scope->statements = g_ptr_array_new();
     if(!$$->scope->statements) {
@@ -314,11 +368,11 @@ statement_list:
       YYABORT;
     }
 
-    $$->scope->statements = g_ptr_array_add($$->scope->statements, $1);
+    g_ptr_array_add($$->scope->statements, $1);
   }
-  | control_structure statement_list {
-    $2->scope->statements = g_ptr_array_add($2->scope->statements, $1);
-    $$ = $2;
+  | statement_list control_structure {
+    g_ptr_array_add($1->scope->statements, $2);
+    $$ = $1;
   }
   | control_structure {
     $$ = ast_node_alloc(NODE_SCOPE);
@@ -327,6 +381,9 @@ statement_list:
       YYABORT;
     }
 
+    $$->scope->identifier = scope;
+    scope++;
+
     $$->scope->statements = g_ptr_array_new();
     if(!$$->scope->statements) {
       STENC_MEMORY_ERROR;
@@ -334,48 +391,78 @@ statement_list:
       YYABORT;
     }
 
-    $$->scope->statements = g_ptr_array_add($$->scope->statements, $1);
+    g_ptr_array_add($$->scope->statements, $1);
   }
   ;
 
 control_structure:
-  IF LEFT_PARENTHESIS expression RIGHT_PARENTHESIS scope { // IF conditional structure without trailing ELSE block
+  IF LEFT_PARENTHESIS expression RIGHT_PARENTHESIS statement { // IF conditional structure without trailing ELSE block
     $$ = ast_node_alloc(NODE_IF);
     if(!$$) {
       STENC_MEMORY_ERROR;
       YYABORT;
+    }
+
+    if($5->type == NODE_SCOPE) {
+      $5->scope->identifier = scope;
+      scope++;
     }
 
     $$->if_conditional->condition = $3;
     $$->if_conditional->onif = $5;
     $$->if_conditional->onelse = NULL;
   }
-  | IF LEFT_PARENTHESIS expression RIGHT_PARENTHESIS scope ELSE scope { // IF conditional structure with trailing ELSE block
+  | IF LEFT_PARENTHESIS expression RIGHT_PARENTHESIS statement ELSE statement { // IF conditional structure with trailing ELSE block
     $$ = ast_node_alloc(NODE_IF);
     if(!$$) {
       STENC_MEMORY_ERROR;
       YYABORT;
     }
 
+    bool new_scope = false;
+    if($5->type == NODE_SCOPE) {
+      $5->scope->identifier = scope;
+      new_scope = true;
+    }
+
+    if($7->type == NODE_SCOPE) {
+      $7->scope->identifier = scope;
+      new_scope = true;
+    }
+
+    if(new_scope) {
+      scope++;
+    }
+
     $$->if_conditional->condition = $3;
     $$->if_conditional->onif = $5;
     $$->if_conditional->onelse = $7; 
   }
-  | WHILE LEFT_PARENTHESIS expression RIGHT_PARENTHESIS scope { // WHILE loop structure
+  | WHILE LEFT_PARENTHESIS expression RIGHT_PARENTHESIS statement { // WHILE loop structure
     $$ = ast_node_alloc(NODE_WHILE);
     if(!$$) {
       STENC_MEMORY_ERROR;
       YYABORT;
     }
 
+    if($5->type == NODE_SCOPE) {
+      $5->scope->identifier = scope;
+      scope++;
+    }
+
     $$->while_loop->condition = $3;
     $$->while_loop->statements = $5;
   }
-  | FOR LEFT_PARENTHESIS assignment COLON expression COLON expression RIGHT_PARENTHESIS scope { // FOR loop structure (no empty specifier items are allowed, also the first item should be an assignment expression)
+  | FOR LEFT_PARENTHESIS assignment COLON expression COLON expression RIGHT_PARENTHESIS statement { // FOR loop structure (no empty specifier items are allowed, also the first item should be an assignment expression)
     $$ = ast_node_alloc(NODE_FOR);
     if(!$$) {
       STENC_MEMORY_ERROR;
       YYABORT;
+    }
+
+    if($9->type == NODE_SCOPE) {
+      $9->scope->identifier = scope;
+      scope++;
     }
 
     $$->for_loop->initialization = $3;
@@ -384,36 +471,58 @@ control_structure:
     $$->for_loop->statements = $9;
   }
   | INT function_declaration {
-    $1->function_declaration->returns = RETURNS_INTEGER;
-    $$ = $1;
+    $2->function_declaration->returns = RETURNS_INTEGER;
+    $$ = $2;
   }
   | VOID function_declaration {
-    $1->function_declaration->returns = RETURNS_VOID;
-    $$ = $1;
+    $2->function_declaration->returns = RETURNS_VOID;
+    $$ = $2;
   }
   ;
 
 statement:
-  assignment { // Assignment statement
+  scope {
     $$ = $1;
   }
-  | INT declaration_list { // Declaration of a variable or an array
+  | assignment COLON { // Assignment statement
+    $$ = $1;
+  }
+  | INT declaration_list COLON { // Declaration of a variable or an array
     $$ = $2;
   }
-  | STENCIL stencil_declaration_list {
+  | STENCIL stencil_declaration_list COLON {
     $$ = $2;
   }
-  | function_call { // Function call
+  | function_call COLON { // Function call
     $$ = $1;
   }
-  | unary_increment_or_decrement {
+  | unary_increment_or_decrement COLON {
     $$ = $1;
+  }
+  | RETURN expression COLON {
+    $$ = ast_node_alloc(NODE_RETURN);
+    if(!$$) {
+      STENC_MEMORY_ERROR;
+      YYABORT;
+    }
+
+    $$->return_statement->type = RETURNS_INTEGER;
+    $$->return_statement->returns = $2;
+  }
+  | RETURN COLON {
+    $$ = ast_node_alloc(NODE_RETURN);
+    if(!$$) {
+      STENC_MEMORY_ERROR;
+      YYABORT;
+    }
+
+    $$->return_statement->type = RETURNS_VOID;
   }
   ;
 
 stencil_declaration_list:
   stencil_declaration_list COMMA stencil_declaration {
-    $1->declaration_list->declarations = g_ptr_array_add($1->declaration_list->declarations, (gpointer) $3);
+    g_ptr_array_add($1->declaration_list->symbols, (gpointer) $3);
     $$ = $1;
   }
   | stencil_declaration {
@@ -423,14 +532,14 @@ stencil_declaration_list:
       YYABORT;
     }
 
-    $$->declaration_list->declarations = g_ptr_array_new();
-    if(!$$->declaration_list->declarations) {
+    $$->declaration_list->symbols = g_ptr_array_new();
+    if(!$$->declaration_list->symbols) {
       STENC_MEMORY_ERROR;
       ast_node_free($$);
       YYABORT;
     }
 
-    $$->declaration_list->declarations = g_ptr_array_add($$->declaration_list->declarations, (gpointer) $1);
+    g_ptr_array_add($$->declaration_list->symbols, (gpointer) $1);
   }
   ;
 
@@ -438,14 +547,14 @@ stencil_declaration:
   IDENTIFIER LEFT_BRACE INTEGER COMMA INTEGER RIGHT_BRACE EQUAL initializer { // Declaration of a stencil
     // Number of dimensions of a stencil should be a positive non-null integer
     if($5 < 1) {
-      yyerror("Number of dimensions of a stencil should be a positive non-null constant, got '%d'!", $6);
+      yyerror("Number of dimensions of a stencil should be a positive non-null constant, got '%d'!", $5);
       YYABORT;
     }
 
     $8->symbol->value->type = VALUE_STENCIL;
 
     // Initialize the stencil value
-    $8->symbol->value->array.dimensions = $6;
+    $8->symbol->value->array.dimensions = $5;
     $8->symbol->value->array.sizes = g_array_new(FALSE, TRUE, sizeof(size_t));
     if(!$8->symbol->value->array.sizes) {
       STENC_MEMORY_ERROR;
@@ -458,7 +567,7 @@ stencil_declaration:
       YYABORT;
     }
 
-    size_t one_size = 1 + $4 * 2, // Size of a stencil is computed based on its neighborhood's size (e. g. a 2D stencil with a neighborhood of 1 will be of size 3x3).
+    size_t one_size = 1 + $3 * 2, // Size of a stencil is computed based on its neighborhood's size (e. g. a 2D stencil with a neighborhood of 1 will be of size 3x3).
            total_size = 1;
     for(size_t i = 0; i < $8->symbol->value->array.dimensions; i++) {
       $8->symbol->value->array.sizes = g_array_append_val($8->symbol->value->array.sizes, one_size);
@@ -466,7 +575,7 @@ stencil_declaration:
     }
 
     if(total_size != $8->symbol->value->array.values->len) {
-      yyerror("Unexpected element count in initializer of array '%s'!", $2);
+      yyerror("Unexpected element count in initializer of array '%s'!", $1);
       YYABORT;
     }
 
@@ -492,7 +601,7 @@ declaration_list:
       $3->binary->LHS->type = NODE_SYMBOL_DECLARATION;
     }
 
-    $1->declaration_list->declarations = g_ptr_array_add($1->declaration_list->declarations, (gpointer) $3);
+    g_ptr_array_add($1->declaration_list->symbols, (gpointer) $3);
     $$ = $1;
   }
   | declaration {
@@ -502,8 +611,8 @@ declaration_list:
       YYABORT;
     }
 
-    $$->declaration_list->declarations = g_ptr_array_new();
-    if(!$$->declaration_list->declarations) {
+    $$->declaration_list->symbols = g_ptr_array_new();
+    if(!$$->declaration_list->symbols) {
       STENC_MEMORY_ERROR;
       ast_node_free($$);
       YYABORT;
@@ -513,7 +622,7 @@ declaration_list:
       $1->binary->LHS->type = NODE_SYMBOL_DECLARATION;
     }
 
-    $$->declaration_list->declarations = g_ptr_array_add($$->declaration_list->declarations, (gpointer) $1);
+    g_ptr_array_add($$->declaration_list->symbols, (gpointer) $1);
   }
   ;
 
@@ -548,26 +657,29 @@ declaration_only:
       ast_node_free($$);
       YYABORT;
     }
+
+    $$->symbol = new_identifier;
   }
   | IDENTIFIER array_accessor_constant { // New array identifier declaration (e. g. 'tab[10][10]')
-    $1->symbol->identifier = strdup($1);
-    if(!$1->symbol->identifier) {
+    $2->symbol->identifier = strdup($1);
+    if(!$2->symbol->identifier) {
       STENC_MEMORY_ERROR;
       YYABORT;
     }
 
-    table_of_symbols = tos_append(table_of_symbols, $1->symbol);
+    table_of_symbols = tos_append(table_of_symbols, $2->symbol);
     if(!table_of_symbols) {
       STENC_MEMORY_ERROR;
       YYABORT;
     }
 
-    $$ = $1;
+    $$ = $2;
   }
   ;
 
 declaration:
   assignment_variable {
+    $1->binary->LHS->type = NODE_SYMBOL_DECLARATION;
     $$ = $1;
   }
   | declaration_only {
@@ -697,7 +809,7 @@ assignment_array:
   ;
 
 unary_increment_or_decrement:
-  PLUSPLUS expression %prec UINCREMENT { // Unary increment with priority (e. g. '++i')
+  PLUSPLUS expression { // Unary increment with priority (e. g. '++i')
     $$ = ast_node_alloc(NODE_UNARY);
     if(!$$) {
       STENC_MEMORY_ERROR;
@@ -707,7 +819,7 @@ unary_increment_or_decrement:
     $$->unary->operation = UO_PLUSPLUS;
     $$->unary->expression = $2;
   }
-  | expression PLUSPLUS { // Unary increment (e. g. 'i++')
+  | expression PLUSPLUS %prec UINCREMENT { // Unary increment (e. g. 'i++')
     $$ = ast_node_alloc(NODE_UNARY);
     if(!$$) {
       STENC_MEMORY_ERROR;
@@ -717,7 +829,7 @@ unary_increment_or_decrement:
     $$->unary->operation = UO_PLUSPLUS;
     $$->unary->expression = $1;
   }
-  | MINUSMINUS expression %prec UINCREMENT { // Unary decrement with priority (e. g. '--i')
+  | MINUSMINUS expression { // Unary decrement with priority (e. g. '--i')
     $$ = ast_node_alloc(NODE_UNARY);
     if(!$$) {
       STENC_MEMORY_ERROR;
@@ -727,7 +839,7 @@ unary_increment_or_decrement:
     $$->unary->operation = UO_MINUSMINUS;
     $$->unary->expression = $2;
   }
-  | expression MINUSMINUS { // Unary decrement (e. g. 'i--')
+  | expression MINUSMINUS %prec UDECREMENT { // Unary decrement (e. g. 'i--')
     $$ = ast_node_alloc(NODE_UNARY);
     if(!$$) {
       STENC_MEMORY_ERROR;
@@ -787,7 +899,7 @@ expression:
     $$->binary->LHS = $1;
     $$->binary->RHS = $3;
   }
-  | expression GREATER_OR_EQUAL expression { // Comparison operator '>=' (e. g. '(12 + test) < foo')
+  | expression GREATER_OR_EQUAL expression { // Comparison operator '>=' (e. g. '(12 + test) >= foo')
     $$ = ast_node_alloc(NODE_BINARY);
     if(!$$) {
       STENC_MEMORY_ERROR;
@@ -798,7 +910,7 @@ expression:
     $$->binary->LHS = $1;
     $$->binary->RHS = $3;
   }
-  | expression GREATER expression { // Comparison operator '>' (e. g. '(12 + test) < foo')
+  | expression GREATER expression { // Comparison operator '>' (e. g. '(12 + test) > foo')
     $$ = ast_node_alloc(NODE_BINARY);
     if(!$$) {
       STENC_MEMORY_ERROR;
@@ -809,7 +921,18 @@ expression:
     $$->binary->LHS = $1;
     $$->binary->RHS = $3;
   }
-  | expression EQUALEQUAL expression { // Comparison operator '==' (e. g. '(12 + test) < foo')
+  | expression NOTEQUAL expression { // Comparison operator '!=' (e. g. '(12 + test) != foo')
+    $$ = ast_node_alloc(NODE_BINARY);
+    if(!$$) {
+      STENC_MEMORY_ERROR;
+      YYABORT;
+    }
+
+    $$->binary->operation = BO_NOTEQUAL;
+    $$->binary->LHS = $1;
+    $$->binary->RHS = $3;
+  }
+  | expression EQUALEQUAL expression { // Comparison operator '==' (e. g. '(12 + test) == foo')
     $$ = ast_node_alloc(NODE_BINARY);
     if(!$$) {
       STENC_MEMORY_ERROR;
