@@ -5,64 +5,86 @@
   #include "../include/common.h"
   #include "../include/ast.h"
   #include "../include/compiler.h"
+
+  void consume_multiline_comment(void);
 %}
 
 /* Token definitions */
 
 %option nounput
 %option noyywrap
-%option noinput
+%option never-interactive
 
-identifier [a-zA-Z_][0-9a-zA-Z_]*
-integer    0|([1-9][0-9]*)
-string     \"[\'0-9a-zA-Z ]*\"
+identifier        [a-zA-Z_][0-9a-zA-Z_]*
+integer           0|([1-9][0-9]*)
+string            \"(\\.|[^\\"])*\"
+oneline_comment   \/\/[^\n]*
+multiline_comment \/\*
 
 %%
 
-return  { return RETURN; }
-int     { return INT; }
-stencil { return STENCIL; }
-void    { return VOID; }
-if      { return IF; }
-else    { return ELSE; }
-while   { return WHILE; }
-for     { return FOR; }
+return  { ECHO; return RETURN; }
+int     { ECHO; return INT; }
+stencil { ECHO; return STENCIL; }
+void    { ECHO; return VOID; }
+if      { ECHO; return IF; }
+else    { ECHO; return ELSE; }
+while   { ECHO; return WHILE; }
+for     { ECHO; return FOR; }
 
-{identifier} { yylval.string = strdup(yytext); printf("Pojeb sa\n"); return IDENTIFIER; }
+{oneline_comment}   { ECHO; }
 
-{integer} { yylval.integer = atoi(yytext); return INTEGER; }
+{multiline_comment} { consume_multiline_comment(); }
 
-{string} { yylval.string = strdup(yytext); return STRING; }
+{identifier}        { ECHO; yylval.string = strdup(yytext); return IDENTIFIER; }
 
-\<   { return LESS; }
-\<\= { return LESS_OR_EQUAL; }
-\>   { return GREATER; }
-\>\= { return GREATER_OR_EQUAL; }
+{integer}           { ECHO; yylval.integer = atoi(yytext); return INTEGER; }
 
-\!   { return NOT; }
-\&\& { return AND; }
-\|\| { return OR; }
-\=\= { return EQUALEQUAL; }
+{string}            { ECHO; yylval.string = strdup(yytext); return STRING; }
 
-\+\+ { return PLUSPLUS; }
-\-\- { return MINUSMINUS; }
-\+   { return PLUS; }
-\-   { return MINUS; }
-\*   { return STAR; }
-\/   { return SLASH; }
-\$   { return DOLLAR; }
-\=   { return EQUAL; }
+\<   { ECHO; return LESS; }
+\<\= { ECHO; return LESS_OR_EQUAL; }
+\>   { ECHO; return GREATER; }
+\>\= { ECHO; return GREATER_OR_EQUAL; }
 
-\( { return LEFT_PARENTHESIS; }
-\) { return RIGHT_PARENTHESIS; }
-\[ { return LEFT_BRACKET; }
-\] { return RIGHT_BRACKET; }
-\{ { return LEFT_BRACE; }
-\} { return RIGHT_BRACE; }
+\!   { ECHO; return NOT; }
+\&\& { ECHO; return AND; }
+\|\| { ECHO; return OR; }
+\!\= { ECHO; return NOTEQUAL; }
+\=\= { ECHO; return EQUALEQUAL; }
 
-\, { return COMMA; }
-\; { return COLON; }
+\+\+ { ECHO; return PLUSPLUS; }
+\-\- { ECHO; return MINUSMINUS; }
+\+   { ECHO; return PLUS; }
+\-   { ECHO; return MINUS; }
+\*   { ECHO; return STAR; }
+\/   { ECHO; return SLASH; }
+\$   { ECHO; return DOLLAR; }
+\=   { ECHO; return EQUAL; }
 
-[ \t\n] ; // Skip spaces.
+\( { ECHO; return LEFT_PARENTHESIS; }
+\) { ECHO; return RIGHT_PARENTHESIS; }
+\[ { ECHO; return LEFT_BRACKET; }
+\] { ECHO; return RIGHT_BRACKET; }
+\{ { ECHO; return LEFT_BRACE; }
+\} { ECHO; return RIGHT_BRACE; }
 
-. { printf("Syntax error: Could not recognize token '%s'!\n", yytext); } // Fail on unrecognized token.
+\, { ECHO; return COMMA; }
+\; { ECHO; return COLON; }
+
+[ \t\n] { ECHO; } // Skip spaces.
+
+. { printf("Syntax error: Could not recognize token '%s'!\n", yytext); } // Fail on any unrecognized token.
+
+%%
+
+void consume_multiline_comment(void) {
+  char current;
+  while((current = input()) != '*' && current != '\0') {}
+
+  if(current == '\0' || input() == '/') {
+    return;
+  } else {
+    consume_multiline_comment();
+  }
+}
