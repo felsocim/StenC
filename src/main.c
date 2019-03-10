@@ -1,4 +1,4 @@
-#include "../include/main.h"
+#include "main.h"
 
 const char * usage_message = "Usage: compiler";
 const char * help_message = "Compiler Help Message";
@@ -14,12 +14,15 @@ int main(int argc, char ** argv) {
 
   yyin = fopen(argv[1], "r");
 
-  yyparse();
+  if(!yyparse()) {
+    ast_dump(AST);
 
-  ast_dump(AST);
-  
-  tos_free(table_of_symbols);
-  ast_node_free(AST);
+    // Clean-up
+    tos_free(table_of_symbols);
+    ast_node_free(AST);
 
-  return 0;
+    return 0;
+  }
+
+  return 1;
 }
