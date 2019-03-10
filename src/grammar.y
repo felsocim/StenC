@@ -21,7 +21,7 @@
 %token <string> IDENTIFIER STRING
 %token <integer> INTEGER
 
-%type <node> array_accessor function_call function_declaration parameter_list scope statement_list control_structure statement declaration declaration_only assignment assignment_array assignment_variable expression declaration_list unary_increment_or_decrement initializer integer_constant_list argument_list array_accessor_constant parameter_list_non_void stencil_declaration stencil_declaration_list
+%type <node> array_accessor function_call function_declaration parameter_list scope statement_list control_structure statement declaration declaration_only assignment assignment_array assignment_variable expression declaration_list unary_increment_or_decrement initializer integer_constant_list argument_list parameter_list_non_void stencil_declaration stencil_declaration_list
 
 
 %left OR
@@ -105,67 +105,66 @@ integer_constant_list:
 
 array_accessor:
 	array_accessor LEFT_BRACKET expression RIGHT_BRACKET {
-    g_ptr_array_add($1->access->accessors, (gpointer) $3);
+    if($1->type == NODE_SYMBOL_DECLARATION && is_node_integer_constant($3)) {
+      $1->symbol->value->array.sizes = g_array_append_val($1->symbol->value->array.sizes, $3);
+      $1->symbol->value->array.dimensions++;
+    } else {
+      g_ptr_array_add($1->access->accessors, (gpointer) $3);
+    }
+    
     $$ = $1;
   }
 	| LEFT_BRACKET expression RIGHT_BRACKET {
-    $$ = ast_node_alloc(NODE_ARRAY_ACCESS);
-    if(!$$) {
-      STENC_MEMORY_ERROR;
-      YYABORT;
+    if(is_node_integer_constant($2)) {
+      Value * array = va_alloc(VALUE_ARRAY);
+      if(!array) {
+        STENC_MEMORY_ERROR;
+        YYABORT;
+      }
+
+      array->array.sizes = g_array_new(FALSE, TRUE, sizeof(int));
+      if(!array->array.sizes) {
+        STENC_MEMORY_ERROR;
+        va_free(array);
+        YYABORT;
+      }
+
+      array->array.sizes = g_array_append_val(array->array.sizes, $2);
+      array->array.dimensions = 1;
+
+      Symbol * symbol = sy_alloc();
+      if(!symbol) {
+        STENC_MEMORY_ERROR;
+        va_free(array);
+        YYABORT;
+      }
+
+      symbol->value = array;
+
+      $$ = ast_node_alloc(NODE_SYMBOL_DECLARATION);
+      if(!$$) {
+        STENC_MEMORY_ERROR;
+        sy_free(symbol);
+        YYABORT;
+      }
+
+      $$->symbol = symbol;
+    } else {
+      $$ = ast_node_alloc(NODE_ARRAY_ACCESS);
+      if(!$$) {
+        STENC_MEMORY_ERROR;
+        YYABORT;
+      }
+
+      $$->access->accessors = g_ptr_array_new();
+      if(!$$->access->accessors) {
+        ast_node_free($$);
+        STENC_MEMORY_ERROR;
+        YYABORT;
+      }
+
+      g_ptr_array_add($$->access->accessors, (gpointer) $2);
     }
-
-    $$->access->accessors = g_ptr_array_new();
-    if(!$$->access->accessors) {
-      ast_node_free($$);
-      STENC_MEMORY_ERROR;
-      YYABORT;
-    }
-
-    g_ptr_array_add($$->access->accessors, (gpointer) $2);
-  }
-  ;
-
-array_accessor_constant:
-	array_accessor LEFT_BRACKET INTEGER RIGHT_BRACKET {
-    $1->symbol->value->array.sizes = g_array_append_val($1->symbol->value->array.sizes, $3);
-    $1->symbol->value->array.dimensions++;
-    $$ = $1;
-  }
-	| LEFT_BRACKET INTEGER RIGHT_BRACKET {
-    Value * array = va_alloc(VALUE_ARRAY);
-    if(!array) {
-      STENC_MEMORY_ERROR;
-      YYABORT;
-    }
-
-    array->array.sizes = g_array_new(FALSE, TRUE, sizeof(int));
-    if(!array->array.sizes) {
-      STENC_MEMORY_ERROR;
-      va_free(array);
-      YYABORT;
-    }
-
-    array->array.sizes = g_array_append_val(array->array.sizes, $2);
-    array->array.dimensions = 1;
-
-    Symbol * symbol = sy_alloc();
-    if(!symbol) {
-      STENC_MEMORY_ERROR;
-      va_free(array);
-      YYABORT;
-    }
-
-    symbol->value = array;
-
-    $$ = ast_node_alloc(NODE_SYMBOL_DECLARATION);
-    if(!$$) {
-      STENC_MEMORY_ERROR;
-      sy_free(symbol);
-      YYABORT;
-    }
-
-    $$->symbol = symbol;
   }
   ;
 
@@ -660,7 +659,12 @@ declaration_only:
 
     $$->symbol = new_identifier;
   }
-  | IDENTIFIER array_accessor_constant { // New array identifier declaration (e. g. 'tab[10][10]')
+  | IDENTIFIER array_accessor { // New array identifier declaration (e. g. 'tab[10][10]')
+    if($2->type != NODE_SYMBOL_DECLARATION) {
+      yyerror("Non-constant expression(s) are not allowed in initializer of array '%s'!", $1);
+      YYABORT;
+    }
+
     $2->symbol->identifier = strdup($1);
     if(!$2->symbol->identifier) {
       STENC_MEMORY_ERROR;
@@ -685,7 +689,12 @@ declaration:
   | declaration_only {
     $$ = $1;
   }
-  | IDENTIFIER array_accessor_constant EQUAL initializer { // New array identifier declaration with immediate definition using an initializer list (e. g. 'tab[3] = {1, 2, 3}')
+  | IDENTIFIER array_accessor EQUAL initializer { // New array identifier declaration with immediate definition using an initializer list (e. g. 'tab[3] = {1, 2, 3}')
+    if($2->type != NODE_SYMBOL_DECLARATION) {
+      yyerror("Non-constant expression(s) are not allowed in initializer of array '%s'!", $1);
+      YYABORT;
+    }
+
     size_t expected_value_count = 1;
     for(guint i = 0; i < $2->symbol->value->array.sizes->len; i++) {
       expected_value_count *= g_array_index($2->symbol->value->array.sizes, size_t, i);
