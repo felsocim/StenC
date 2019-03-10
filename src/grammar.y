@@ -17,12 +17,11 @@
   ASTNode * node;
 }
 
-%token RETURN INT STENCIL IF ELSE WHILE FOR LESS LESS_OR_EQUAL GREATER GREATER_OR_EQUAL NOT AND OR NOTEQUAL EQUALEQUAL PLUS MINUS STAR SLASH DOLLAR EQUAL LEFT_PARENTHESIS RIGHT_PARENTHESIS LEFT_BRACKET RIGHT_BRACKET LEFT_BRACE RIGHT_BRACE COMMA COLON MINUSMINUS PLUSPLUS VOID
+%token DEFINE RETURN INT STENCIL IF ELSE WHILE FOR LESS LESS_OR_EQUAL GREATER GREATER_OR_EQUAL NOT AND OR NOTEQUAL EQUALEQUAL PLUS MINUS STAR SLASH DOLLAR EQUAL LEFT_PARENTHESIS RIGHT_PARENTHESIS LEFT_BRACKET RIGHT_BRACKET LEFT_BRACE RIGHT_BRACE COMMA COLON MINUSMINUS PLUSPLUS VOID
 %token <string> IDENTIFIER STRING
 %token <integer> INTEGER
 
-%type <node> array_accessor function_call function_declaration parameter_list scope statement_list control_structure statement declaration declaration_only assignment assignment_array assignment_variable expression declaration_list unary_increment_or_decrement initializer integer_constant_list argument_list parameter_list_non_void stencil_declaration stencil_declaration_list
-
+%type <node> array_accessor function_call function_declaration parameter_list scope statement_list control_structure statement declaration declaration_only assignment assignment_array assignment_variable expression declaration_list unary_increment_or_decrement initializer integer_constant_list argument_list parameter_list_non_void stencil_declaration stencil_declaration_list define define_list
 
 %left OR
 %left AND
@@ -39,9 +38,92 @@
 %%
 
 module:
-  statement_list {
-    AST = $1;
+  define_list statement_list {
+    if($1) {
+      g_ptr_array_insert($2->scope->statements, 0, $1);
+    }
+
+    AST = $2;
     YYACCEPT;
+  }
+  ;
+
+define_list:
+  define_list '\n' define {
+    g_ptr_array_add($1->declaration_list->symbols, (gpointer) $3);
+    $$ = $1;
+  }
+  | define {
+    $$ = ast_node_alloc(NODE_DECLARATION_LIST);
+    if(!$$) {
+      STENC_MEMORY_ERROR;
+      YYABORT;
+    }
+
+    $$->declaration_list->symbols = g_ptr_array_new();
+    if(!$$->declaration_list->symbols) {
+      STENC_MEMORY_ERROR;
+      ast_node_free($$);
+      YYABORT;
+    }
+
+    g_ptr_array_add($$->declaration_list->symbols, (gpointer) $1);
+  }
+  | {
+    $$ = NULL;
+  }
+  ;
+
+define:
+  DEFINE IDENTIFIER expression {
+    int value;
+    bool is_unary = false;
+    if($3 && $3->type == NODE_UNARY && $3->unary->operation == UO_MINUS && is_node_integer_constant($3->unary->expression)) {
+      value = -$3->unary->expression->symbol->value->integer;
+      is_unary = true;
+    } else if(is_node_integer_constant($3)) {
+      value = $3->symbol->value->integer;
+    } else {
+      yyerror("Expected integer constant value in definition of macro '%s'!", $2);
+      YYABORT;
+    }
+
+    Symbol * existing = tos_lookup(table_of_symbols, $2);
+    if(!existing) {
+      Value * constant = va_alloc(VALUE_INTEGER);
+      if(!constant) {
+        STENC_MEMORY_ERROR;
+        YYABORT;
+      }
+
+      constant->integer = value;
+
+      existing = sy_variable($2, true, constant);
+      if(!existing) {
+        STENC_MEMORY_ERROR;
+        va_free(constant);
+        YYABORT;
+      }
+
+      Symbol * to_clean_up = NULL;
+      if(!is_unary) {
+        to_clean_up = $3->symbol;
+      }
+
+      $3->symbol = existing;
+      sy_free(to_clean_up);
+    } else {
+      printf("Warning: Re-definition of macro '%s'!", $2);
+      existing->value->integer = $3->symbol->value->integer;
+    }
+
+    $$ = ast_node_alloc(NODE_SYMBOL_DECLARATION);
+    if(!$$) {
+      STENC_MEMORY_ERROR;
+      YYABORT;
+    }
+
+    $$->symbol = existing;
   }
   ;
 

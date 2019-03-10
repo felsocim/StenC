@@ -23,6 +23,8 @@ multiline_comment \/\*
 
 %%
 
+#define { ECHO; return DEFINE; }
+
 return  { ECHO; return RETURN; }
 int     { ECHO; return INT; }
 stencil { ECHO; return STENCIL; }
