@@ -12,6 +12,7 @@ include/lexer.h
 include/compiler.h
 src/lexer.c
 src/compiler.c
+src/compiler.output
 
 # Output files
 *.s
