@@ -51,7 +51,7 @@ Symbol * sy_temporary(bool is_constant, Value * value) {
     goto error;
   }
 
-  if(snprintf(name, length, "%s%d", SY_TEMPORARY_PREFIX, number) != (int) length) {
+  if(snprintf(name, length + 1, "%s%d", SY_TEMPORARY_PREFIX, number) != (int) length) {
     goto clean;
   }
 
