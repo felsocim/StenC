@@ -42,7 +42,7 @@ void va_print(const Value * value) {
       for(guint i = 0; i < value->array.values->len; i += chunk_size) {
         printf("{ ");
         for(size_t j = 0; j < chunk_size; j++) {
-          printf("%d%s", g_array_index(value->array.values, int, i + j), (j < chunk_size - 1 ? ", " : ""));
+          printf("%d%s", g_array_index(value->array.values, int, i + j), (j < chunk_size - 1 ? ", " : " "));
         }
         printf("}%s", (i < value->array.values->len - chunk_size ? ", " : ""));
       }
