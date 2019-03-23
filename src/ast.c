@@ -318,6 +318,15 @@ void ast_dump_and_indent(const ASTNode * node, size_t indent, const char * begin
             printf("%s integer array variable <name: %s>\n", beginning, node->symbol->identifier);
           }
           break;
+        case VALUE_STENCIL:
+          if(node->symbol->is_constant) {
+            printf("%s stencil constant <name: %s, values: ", beginning, node->symbol->identifier);
+            va_print(node->symbol->value);
+            printf(">\n");
+          } else {
+            printf("%s stencil reference <name: %s>\n", beginning, node->symbol->identifier);
+          }
+          break;
         case VALUE_FUNCTION:
         case VALUE_LABEL:
         default:
