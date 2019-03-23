@@ -8,7 +8,7 @@ Symbol * sy_alloc(void) {
   }
 
   table->identifier = NULL;
-  table->scopes = g_array_new(FALSE, FALSE, sizeof(int));
+  table->scopes = g_array_new(FALSE, FALSE, sizeof(size_t));
   if(!table->scopes) {
     free(table);
     return NULL;
