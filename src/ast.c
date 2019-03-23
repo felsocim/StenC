@@ -58,6 +58,7 @@ ASTNode * ast_node_alloc(ASTType type) {
       }
 
       node->return_statement->returns = NULL;
+      break;
     case NODE_DECLARATION_LIST:
       if(!(node->declaration_list = (ASTDeclarationList *) malloc(sizeof(ASTDeclarationList)))) {
         return NULL;
