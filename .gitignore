@@ -17,5 +17,8 @@ src/compiler.output
 # Output files
 *.s
 
+# Test files
+tests
+
 # IDE
 .vscode
