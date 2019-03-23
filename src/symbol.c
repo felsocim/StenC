@@ -120,6 +120,9 @@ void sy_print(const Symbol * symbol) {
     case VALUE_ARRAY:
       printf("array\t");
       break;
+    case VALUE_STENCIL:
+      printf("stencil\t");
+      break;
     case VALUE_FUNCTION:
       printf("function\t");
       break;
