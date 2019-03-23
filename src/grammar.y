@@ -177,7 +177,8 @@ initializer:
 
 integer_constant_list:
   integer_constant_list COMMA initializer {
-    $1->symbol->value->array.values = g_array_append_vals($1->symbol->value->array.values, $3->symbol->value->array.values, $3->symbol->value->array.values->len);
+    //printf("appending %u\n", $3->symbol->value->array.values->len);
+    $1->symbol->value->array.values = g_array_append_vals($1->symbol->value->array.values, $3->symbol->value->array.values->data, $3->symbol->value->array.values->len);
     $$ = $1;
   }
   | initializer {
@@ -188,7 +189,8 @@ integer_constant_list:
 array_accessor:
 	array_accessor LEFT_BRACKET expression RIGHT_BRACKET {
     if($1->type == NODE_SYMBOL_DECLARATION && is_node_integer_constant($3)) {
-      $1->symbol->value->array.sizes = g_array_append_val($1->symbol->value->array.sizes, $3);
+      size_t value = (size_t) $3->symbol->value->integer;
+      $1->symbol->value->array.sizes = g_array_append_val($1->symbol->value->array.sizes, value);
       $1->symbol->value->array.dimensions++;
     } else {
       g_ptr_array_add($1->access->accessors, (gpointer) $3);
@@ -204,14 +206,15 @@ array_accessor:
         YYABORT;
       }
 
-      array->array.sizes = g_array_new(FALSE, TRUE, sizeof(int));
+      array->array.sizes = g_array_new(FALSE, TRUE, sizeof(size_t));
       if(!array->array.sizes) {
         STENC_MEMORY_ERROR;
         va_free(array);
         YYABORT;
       }
 
-      array->array.sizes = g_array_append_val(array->array.sizes, $2);
+      size_t value = (size_t) $2->symbol->value->integer;
+      array->array.sizes = g_array_append_val(array->array.sizes, value);
       array->array.dimensions = 1;
 
       Symbol * symbol = sy_alloc();
@@ -803,6 +806,8 @@ declaration:
       STENC_MEMORY_ERROR;
       YYABORT;
     }
+    
+    $2->symbol->is_constant = true;
 
     ast_node_free($4);
     $$ = $2;
