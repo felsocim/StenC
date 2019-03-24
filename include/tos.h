@@ -16,6 +16,7 @@ typedef struct {
 TOS * tos_alloc(void);
 TOS * tos_append(TOS *, Symbol *);
 Symbol * tos_lookup(const TOS *, const char *);
+void tos_dump(const TOS *);
 void tos_free(TOS *);
 
 #endif // TOS_H

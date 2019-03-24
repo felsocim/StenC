@@ -50,6 +50,19 @@ Symbol * tos_lookup(const TOS * table, const char * identifier) {
   return NULL;
 }
 
+void tos_dump(const TOS * table) {
+  if(!table) {
+    printf("No symbols in table!\n");
+    return;
+  }
+
+  printf("Identifier:\tType:\tDefined in scope(s):\tValue:\n");
+
+  for(size_t i = 0; i < table->index; i++) {
+    sy_print(table->data[i]);
+  }
+}
+
 void tos_free(TOS * table) {
   if(!table) {
     return;
