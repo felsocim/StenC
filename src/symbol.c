@@ -133,6 +133,16 @@ void sy_print(const Symbol * symbol) {
       return;
   }
 
+  if(symbol->scopes->len) {
+    guint i = 0;
+    for(; i < symbol->scopes->len - 1; i++) {
+      printf("%lu, ", g_array_index(symbol->scopes, size_t, i));
+    }
+    printf("%lu", g_array_index(symbol->scopes, size_t, i));
+  }
+
+  printf("\t\t\t");
+
   if(symbol->is_constant && symbol->value->type < VALUE_FUNCTION) {
     va_print(symbol->value);
   } else {
