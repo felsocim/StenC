@@ -301,9 +301,9 @@ void ast_dump_and_indent(const ASTNode * node, size_t indent, const char * begin
       switch(node->symbol->value->type) {
         case VALUE_INTEGER:
           if(node->symbol->is_constant) {
-            printf("%s integer constant (%s) <name: %s, value: %d>\n", beginning, node->type == NODE_SYMBOL ? "reference" : "declaration", node->symbol->identifier, node->symbol->value->integer);
+            printf("%s integer %s <name: %s, value: %d>\n", beginning, node->type == NODE_SYMBOL ? "reference" : "declaration", node->symbol->identifier, node->symbol->value->integer);
           } else {
-            printf("%s integer variable (%s) <name: %s>\n", beginning, node->type == NODE_SYMBOL ? "reference" : "declaration", node->symbol->identifier);
+            printf("%s integer %s <name: %s>\n", beginning, node->type == NODE_SYMBOL ? "reference" : "declaration", node->symbol->identifier);
           }
           break;
         case VALUE_STRING:
@@ -311,16 +311,16 @@ void ast_dump_and_indent(const ASTNode * node, size_t indent, const char * begin
           break;
         case VALUE_ARRAY:
           if(node->symbol->is_constant) {
-            printf("%s integer array constant <name: %s, values: ", beginning, node->symbol->identifier);
+            printf("%s integer array %s <name: %s, values: ", beginning, node->type == NODE_SYMBOL ? "reference" : "declaration", node->symbol->identifier);
             va_print(node->symbol->value);
             printf(">\n");
           } else {
-            printf("%s integer array variable <name: %s>\n", beginning, node->symbol->identifier);
+            printf("%s integer array %s <name: %s>\n", beginning, node->type == NODE_SYMBOL ? "reference" : "declaration", node->symbol->identifier);
           }
           break;
         case VALUE_STENCIL:
           if(node->symbol->is_constant) {
-            printf("%s stencil constant <name: %s, values: ", beginning, node->symbol->identifier);
+            printf("%s stencil declaration <name: %s, values: ", beginning, node->symbol->identifier);
             va_print(node->symbol->value);
             printf(">\n");
           } else {
