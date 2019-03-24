@@ -17,6 +17,9 @@ int main(int argc, char ** argv) {
   if(!yyparse()) {
     ast_dump(AST);
 
+    printf("\nTABLE OF SYMBOLS FOLLOWS\n");
+    tos_dump(table_of_symbols);
+
     // Clean-up
     tos_free(table_of_symbols);
     ast_node_free(AST);
