@@ -451,6 +451,73 @@ ASTFunctionDeclaration * ast_find_function_declaration(const ASTNode * tree, con
   return NULL;
 }
 
+void ast_scope_complete(ASTNode * node, size_t scope) {
+  switch(node->type) {
+    case NODE_RETURN:
+      ast_scope_complete(node->return_statement->returns, scope);
+      break;
+    case NODE_DECLARATION_LIST:
+      for(guint i = 0; i < node->declaration_list->symbols->len; i++) {
+        ast_scope_complete(g_ptr_array_index(node->declaration_list->symbols, i), scope);
+      }
+      break;
+    case NODE_SYMBOL_DECLARATION:
+    case NODE_SYMBOL:
+      node->symbol->scopes = g_array_append_val(node->symbol->scopes, scope);
+      return;
+    case NODE_ARRAY_ACCESS:
+      node->access->array->scopes = g_array_append_val(node->access->array->scopes, scope);
+      for(guint i = 0; i < node->access->accessors->len; i++) {
+        ast_scope_complete(g_ptr_array_index(node->access->accessors, i), scope);
+      }
+      break;
+    case NODE_UNARY:
+      ast_scope_complete(node->unary->expression, scope);
+      break;
+    case NODE_BINARY:
+      ast_scope_complete(node->binary->LHS, scope);
+      ast_scope_complete(node->binary->RHS, scope);
+      break;
+    case NODE_IF:
+      ast_scope_complete(node->if_conditional->condition, scope);
+      ast_scope_complete(node->if_conditional->onif, scope);
+      if(node->if_conditional->onelse) {
+        ast_scope_complete(node->if_conditional->onelse, scope);
+      }
+      break;
+    case NODE_WHILE:
+      ast_scope_complete(node->while_loop->condition, scope);
+      ast_scope_complete(node->while_loop->statements, scope);
+      break;
+    case NODE_FOR:
+      ast_scope_complete(node->for_loop->initialization, scope);
+      ast_scope_complete(node->for_loop->condition, scope);
+      ast_scope_complete(node->for_loop->incrementation, scope);
+      ast_scope_complete(node->for_loop->statements, scope);
+      break;
+    case NODE_FUNCTION_DECLARATION:
+      node->function_declaration->function->scopes = g_array_append_val(node->function_declaration->function->scopes, scope);
+      ast_scope_complete(node->function_declaration->body, scope);
+      break;
+    case NODE_FUNCTION_CALL:
+      node->function_call->function->scopes = g_array_append_val(node->function_call->function->scopes, scope);
+      if(node->function_call->argv->len) {
+        guint i = 0;
+        for(; i < node->function_call->argv->len; i++) {
+          ast_scope_complete(g_ptr_array_index(node->function_call->argv, i), scope);
+        }
+      }
+      break;
+    case NODE_SCOPE:
+      for(guint j = 0; j < node->scope->statements->len; j++) {
+        ast_scope_complete(g_ptr_array_index(node->scope->statements, j), scope);
+      }
+      break;
+    default: // Unknown AST node type detected
+      return;
+  }
+}
+
 bool is_node_integer_constant(const ASTNode * node) {
   return node && node->type == NODE_SYMBOL && node->symbol->is_constant && node->symbol->value->type == VALUE_INTEGER;
 }

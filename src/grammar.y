@@ -337,6 +337,7 @@ function_declaration:
     }
 
     $5->scope->identifier = scope;
+    ast_scope_complete($5, scope);
     scope++;
 
     // Create value object for the identifier.
@@ -370,6 +371,8 @@ function_declaration:
 
 scope:
   LEFT_BRACE statement_list RIGHT_BRACE {
+    $2->scope->identifier = scope;
+    scope++;
     $$ = $2;
   }
   ;
@@ -385,9 +388,6 @@ statement_list:
       STENC_MEMORY_ERROR;
       YYABORT;
     }
-
-    $$->scope->identifier = scope;
-    scope++;
 
     $$->scope->statements = g_ptr_array_new();
     if(!$$->scope->statements) {
@@ -409,9 +409,6 @@ statement_list:
       YYABORT;
     }
 
-    $$->scope->identifier = scope;
-    scope++;
-
     $$->scope->statements = g_ptr_array_new();
     if(!$$->scope->statements) {
       STENC_MEMORY_ERROR;
@@ -432,8 +429,7 @@ control_structure:
     }
 
     if($5->type == NODE_SCOPE) {
-      $5->scope->identifier = scope;
-      scope++;
+      ast_scope_complete($5, $5->scope->identifier);
     }
 
     $$->if_conditional->condition = $3;
@@ -447,19 +443,12 @@ control_structure:
       YYABORT;
     }
 
-    bool new_scope = false;
     if($5->type == NODE_SCOPE) {
-      $5->scope->identifier = scope;
-      new_scope = true;
+      ast_scope_complete($5, $5->scope->identifier);
     }
 
     if($7->type == NODE_SCOPE) {
-      $7->scope->identifier = scope;
-      new_scope = true;
-    }
-
-    if(new_scope) {
-      scope++;
+      ast_scope_complete($7, $7->scope->identifier);
     }
 
     $$->if_conditional->condition = $3;
@@ -474,8 +463,7 @@ control_structure:
     }
 
     if($5->type == NODE_SCOPE) {
-      $5->scope->identifier = scope;
-      scope++;
+      ast_scope_complete($5, $5->scope->identifier);
     }
 
     $$->while_loop->condition = $3;
@@ -489,8 +477,7 @@ control_structure:
     }
 
     if($9->type == NODE_SCOPE) {
-      $9->scope->identifier = scope;
-      scope++;
+      ast_scope_complete($9, $9->scope->identifier);
     }
 
     $$->for_loop->initialization = $3;
@@ -739,6 +726,13 @@ declaration_only:
 declaration:
   assignment_variable {
     $1->binary->LHS->type = NODE_SYMBOL_DECLARATION;
+
+    table_of_symbols = tos_append(table_of_symbols, $1->binary->LHS->symbol);
+    if(!table_of_symbols) {
+      STENC_MEMORY_ERROR;
+      YYABORT;
+    }
+
     $$ = $1;
   }
   | declaration_only {

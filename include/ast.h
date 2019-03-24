@@ -140,6 +140,7 @@ ASTNode * ast_node_alloc(ASTType);
 void ast_node_free(ASTNode *);
 void ast_dump(const ASTNode *);
 bool is_node_integer_constant(const ASTNode *);
+void ast_scope_complete(ASTNode *, size_t);
 
 ASTFunctionDeclaration * ast_find_function_declaration(const ASTNode *, const Symbol *);
 
