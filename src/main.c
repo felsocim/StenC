@@ -17,6 +17,8 @@ int main(int argc, char ** argv) {
   if(!yyparse()) {
     ast_dump(AST);
 
+    printf("AST verification %s\n", ast_verify(AST, table_of_symbols) ? "is OK!" : "failed!");
+
     printf("\nTABLE OF SYMBOLS FOLLOWS\n");
     tos_dump(table_of_symbols);
 

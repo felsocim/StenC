@@ -50,6 +50,29 @@ Symbol * tos_lookup(const TOS * table, const char * identifier) {
   return NULL;
 }
 
+bool tos_exists(const TOS * table, const Symbol * symbol) {
+  if(!table || !symbol) {
+    return false;
+  }
+
+  for(size_t i = 0; i < table->index; i++) {
+    if(!strcmp(table->data[i]->identifier, symbol->identifier)) {
+      for(guint j = 0; j < symbol->scopes->len; j++) {
+        for(guint k = 0; k < table->data[i]->scopes->len; k++) {
+          if(symbol->scopes->data[j] == table->data[i]->scopes->data[k]) {
+            printf("Symbol: %s already exists\n", symbol->identifier);
+            return true;
+          }
+        }
+      }
+    }
+  }
+
+  printf("Symbol: %s does NOT exist\n", symbol->identifier);
+
+  return false;
+}
+
 void tos_dump(const TOS * table) {
   if(!table) {
     printf("No symbols in table!\n");

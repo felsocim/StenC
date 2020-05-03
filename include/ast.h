@@ -7,6 +7,7 @@
 #include <gmodule.h>
 
 #include "symbol.h"
+#include "tos.h"
 
 // Enumeration of supported operators ('UO' stands for 'Unary Operator' and 'BO' for 'Binary Operator')
 typedef enum {
@@ -141,6 +142,7 @@ void ast_node_free(ASTNode *);
 void ast_dump(const ASTNode *);
 bool is_node_integer_constant(const ASTNode *);
 void ast_scope_complete(ASTNode *, size_t);
+bool ast_verify(const ASTNode *, const TOS *);
 
 ASTFunctionDeclaration * ast_find_function_declaration(const ASTNode *, const Symbol *);
 

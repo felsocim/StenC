@@ -518,6 +518,83 @@ void ast_scope_complete(ASTNode * node, size_t scope) {
   }
 }
 
+bool ast_verify(const ASTNode * node, const TOS * tos) {
+  switch(node->type) {
+    case NODE_RETURN:
+      return ast_verify(node->return_statement->returns, tos);
+    case NODE_DECLARATION_LIST:
+      for(guint i = 0; i < node->declaration_list->symbols->len; i++) {
+        if(!ast_verify(g_ptr_array_index(node->declaration_list->symbols, i), tos)) {
+          return false;
+        }
+      }
+      return true;
+    case NODE_SYMBOL_DECLARATION:
+      printf("SY DECL\n");
+      return !tos_exists(tos, node->symbol);
+    case NODE_SYMBOL:
+      printf("SY OCC\n");
+      return tos_exists(tos, node->symbol);
+    case NODE_ARRAY_ACCESS:
+      printf("SY OCC\n");
+      if(!tos_exists(tos, node->access->array)) {
+        return false;
+      }
+      for(guint i = 0; i < node->access->accessors->len; i++) {
+        if(!ast_verify(g_ptr_array_index(node->access->accessors, i), tos)) {
+          return false;
+        }
+      }
+      return true;
+    case NODE_UNARY:
+      return ast_verify(node->unary->expression, tos);
+    case NODE_BINARY:
+      return ast_verify(node->binary->LHS, tos) && ast_verify(node->binary->RHS, tos);
+    case NODE_IF:
+      if(!ast_verify(node->if_conditional->condition, tos) || !ast_verify(node->if_conditional->onif, tos)) {
+        return false;
+      }
+      if(node->if_conditional->onelse) {
+        if(!ast_verify(node->if_conditional->onelse, tos)) {
+          return false;
+        }
+      }
+      return true;
+    case NODE_WHILE:
+      return ast_verify(node->while_loop->condition, tos) && ast_verify(node->while_loop->statements, tos);
+    case NODE_FOR:
+      return ast_verify(node->for_loop->initialization, tos) &&
+             ast_verify(node->for_loop->condition, tos) &&
+             ast_verify(node->for_loop->incrementation, tos) &&
+             ast_verify(node->for_loop->statements, tos);
+    case NODE_FUNCTION_DECLARATION:
+      printf("SY OCC\n");
+      return !tos_exists(tos, node->function_declaration->function) && ast_verify(node->function_declaration->body, tos);
+    case NODE_FUNCTION_CALL:
+      if(!tos_exists(tos, node->function_call->function)) {
+        return false;
+      }
+      if(node->function_call->argv->len) {
+        for(guint i = 0; i < node->function_call->argv->len; i++) {
+          if(!ast_verify(g_ptr_array_index(node->function_call->argv, i), tos)) {
+            return true;
+          }
+        }
+      }
+      return true;
+    case NODE_SCOPE:
+      for(guint j = 0; j < node->scope->statements->len; j++) {
+        printf("Scop stmt #%u\n", j);
+        if(!ast_verify(g_ptr_array_index(node->scope->statements, j), tos)) {
+          return false;
+        }
+      }
+      return true;
+    default: // Unknown AST node type detected
+      return false;
+  }
+}
+
 bool is_node_integer_constant(const ASTNode * node) {
   return node && node->type == NODE_SYMBOL && node->symbol->is_constant && node->symbol->value->type == VALUE_INTEGER;
 }
