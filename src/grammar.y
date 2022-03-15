@@ -2,7 +2,7 @@
   #include "../include/main.h"
 
   int yylex();
-  void yyerror(char*);
+  void yyerror(const char *);
 %}
 
 %union{
