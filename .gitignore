@@ -9,11 +9,17 @@ bin/*
 
 # Analyzers
 include/compiler.h
+include/lexer.h
 src/compiler.c
 src/lexer.c
+src/compiler.output
 
 # Test files
 test/*
 
 # Output files
 *.s
+
+# IDE configuration
+.vscode
+
