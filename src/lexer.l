@@ -25,7 +25,7 @@ number     0|([1-9][0-9]*)
 initTab \{([ \t\n]*{number}[ \t\n]*,)*([ \t\n]*{number})[ \t\n]*\}
 {initTab} { printf("inittab reconnu;\n");
 			return INITTAB;}*/
-string	\"[\'0-9a-zA-Z ]*\"
+string	\"[^\n\r]*\"
 
 %%
 main { return MAIN; }
