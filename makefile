@@ -1,7 +1,7 @@
 CC = gcc
 LEX = flex
 YACC = bison -d
-CFLAGS = -g -Wall
+CFLAGS = -g -Wall -I./include
 LDFLAGS = -lfl -ly -lm
 
 all: compiler include/main.h
