@@ -79,7 +79,7 @@ SList * sl_concatenate(SList * list1, SList * list2) {
   if(list2->next == 0)
     return list1;
 
-    size_t i = 0;
+  size_t i = 0;
 
   for(i = 0; i < list2->next; i++) {
     list1 = sl_insert(list1, list2->values[i]);
